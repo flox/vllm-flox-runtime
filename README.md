@@ -147,11 +147,11 @@ Settings are split between a static config file and runtime environment variable
 
 ### Static settings (`config.yaml`)
 
-These settings are read by `vllm-serve` and passed directly to `vllm serve` via `--config`. They are not overridable at activation time.
+These settings are read by `vllm-serve` and passed directly to `vllm serve` via `--config`. `host` and `port` are overridden by the `VLLM_HOST`/`VLLM_PORT` env vars (passed as CLI args, which take precedence over config file values).
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `host` | `127.0.0.1` | Bind address |
+| `host` | `0.0.0.0` | Bind address |
 | `port` | `8000` | HTTP listen port |
 | `dtype` | `auto` | Weight data type. `auto` selects BF16 for BF16 models, FP16 for FP16/FP32 models |
 | `gpu-memory-utilization` | `0.92` | Per-GPU VRAM fraction for KV cache. 0.92 is aggressive but stable for 24 GB cards (~2 GB headroom for CUDA context). Use 0.95 for 48 GB+ cards. Reduce if you see OOM during prefill |
@@ -180,7 +180,7 @@ VLLM_MAX_MODEL_LEN=16384 VLLM_KV_CACHE_DTYPE=fp8 flox activate --start-services
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VLLM_HOST` | `127.0.0.1` | Server bind address |
+| `VLLM_HOST` | `0.0.0.0` | Server bind address |
 | `VLLM_PORT` | `8000` | Server listen port. Must be 1-65535 |
 | `VLLM_API_KEY` | `sk-vllm-local-dev` | Bearer token for API authentication |
 
@@ -332,7 +332,7 @@ In `--dry-run` mode (`VLLM_DRY_RUN=1`), exit codes are `0`/`2`/`3`/`4` only (nev
 
 | Variable | Default | Validation | Description |
 |----------|---------|------------|-------------|
-| `VLLM_HOST` | `127.0.0.1` | — | Bind address to check |
+| `VLLM_HOST` | `0.0.0.0` | — | Bind address to check |
 | `VLLM_PORT` | `8000` | Integer, 1-65535 | Port to check and reclaim |
 | `VLLM_OWNER_REGEX` | _(built-in heuristic)_ | Valid regex | Regex to identify vLLM owner processes. Matched against `/proc/<pid>/cmdline` and `/proc/<pid>/exe`. See example below |
 | `VLLM_DRY_RUN` | `0` | `0` or `1` | Report what would happen without sending signals |
@@ -414,6 +414,8 @@ vllm-serve -- --extra-flag val       # pass extra args through to vllm serve
 | Variable | Validation | Description |
 |----------|------------|-------------|
 | `FLOX_ENV_PROJECT` | Must be a directory | Project root (for `config.yaml`). Not required if `VLLM_CONFIG_FILE` is set |
+| `VLLM_HOST` | Non-empty | Server bind address |
+| `VLLM_PORT` | Positive integer | Server listen port |
 | `VLLM_TENSOR_PARALLEL_SIZE` | Positive integer | Tensor parallelism GPU count |
 | `VLLM_PIPELINE_PARALLEL_SIZE` | Positive integer | Pipeline parallelism GPU count |
 | `VLLM_KV_CACHE_DTYPE` | Non-empty, no whitespace | KV cache dtype (e.g., `auto`, `fp8`) |
@@ -461,6 +463,8 @@ The env file must define `_VLLM_RESOLVED_MODEL` or `vllm-serve` exits with an er
 ```bash
 vllm serve <_VLLM_RESOLVED_MODEL> \
   --config <config_file> \
+  --host <VLLM_HOST> \
+  --port <VLLM_PORT> \
   --tensor-parallel-size <VLLM_TENSOR_PARALLEL_SIZE> \
   --pipeline-parallel-size <VLLM_PIPELINE_PARALLEL_SIZE> \
   --kv-cache-dtype <VLLM_KV_CACHE_DTYPE> \
@@ -477,6 +481,8 @@ The env var to vLLM CLI flag mapping:
 |---------|----------|
 | `_VLLM_RESOLVED_MODEL` | positional (model argument) |
 | `VLLM_CONFIG_FILE` or `$FLOX_ENV_PROJECT/config.yaml` | `--config` |
+| `VLLM_HOST` | `--host` |
+| `VLLM_PORT` | `--port` |
 | `VLLM_TENSOR_PARALLEL_SIZE` | `--tensor-parallel-size` |
 | `VLLM_PIPELINE_PARALLEL_SIZE` | `--pipeline-parallel-size` |
 | `VLLM_KV_CACHE_DTYPE` | `--kv-cache-dtype` |

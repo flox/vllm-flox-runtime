@@ -1,25 +1,21 @@
 # vLLM server configuration
 # See: https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html
 #
-# Tuning notes:
+# Settings controlled by on-activate hook (override at activation time):
+#   VLLM_PREFIX_CACHING, VLLM_KV_CACHE_DTYPE, VLLM_MAX_MODEL_LEN,
+#   VLLM_MAX_NUM_BATCHED_TOKENS, VLLM_SERVED_MODEL_NAME,
+#   VLLM_TENSOR_PARALLEL_SIZE, VLLM_PIPELINE_PARALLEL_SIZE
+#
+# Static settings below are not runtime-tunable via env vars:
 #   gpu-memory-utilization: fraction of VRAM per GPU for KV cache. 0.92 is
 #     aggressive but stable for 24GB cards (~2GB headroom for CUDA context).
 #     For 48GB+ cards, 0.95 is safe. Reduce if you see OOM during prefill.
-#   max-model-len: max sequence length (input + output). Capped here at 8192
-#     as a conservative default for 24GB. Scale up with more VRAM or fewer
-#     concurrent requests. Set to null to use the model's native max.
-#   tensor-parallel-size / pipeline-parallel-size: set via environment
-#     variables VLLM_TENSOR_PARALLEL_SIZE and VLLM_PIPELINE_PARALLEL_SIZE
-#     in the manifest, not in this file (they're CLI-only flags).
 
-host: "127.0.0.1"
+host: "0.0.0.0"
 port: 8000
 
 dtype: auto
 gpu-memory-utilization: 0.92
-max-model-len: 8192
-
-served-model-name: "default"
 
 disable-log-requests: true
 uvicorn-log-level: "warning"
