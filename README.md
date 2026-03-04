@@ -1,687 +1,705 @@
-# vLLM Runtime Environment
+# vLLM Runtime
 
-Production vLLM inference server packaged as a composable Flox environment. Part of a three-environment reference architecture for serving LLMs with monitoring and secure network access.
-
-Developed on an RTX 5090 (24GB, SM120), but the architecture applies to any NVIDIA GPU setup — single or multi-GPU. Adjust `config.yaml`, the SM variant in the manifest, and the parallelism settings for your hardware.
+Production vLLM inference server as a Flox environment. Installs `flox/vllm-flox-runtime` (model provisioning and serving scripts) and `flox/vllm-python312-cuda12_9-sm120` (vLLM + CUDA + Python) from the Flox catalog.
 
 - **vLLM**: 0.15.1
-- **CUDA**: 12.9 (requires NVIDIA driver 560+)
+- **CUDA**: 12.9 (requires NVIDIA driver 575+)
 - **Target**: SM120 (RTX 5090 / Blackwell)
 - **Python**: 3.12
 
-## Quick Start
+Swap the SM variant in the manifest for your GPU (e.g., `sm90` for H100, `sm89` for RTX 4090).
+
+## Quick start
 
 ```bash
-# Activate the environment
-flox activate -d /home/daedalus/dev/vllm-runtime
+# Activate and start the vLLM service
+flox activate --start-services
 
-# Start the vLLM service (downloads the default model on first run)
-flox services start
-
-# Or activate and start services in one step
-flox activate -d /home/daedalus/dev/vllm-runtime --start-services
+# Override the model at activation time
+VLLM_MODEL=DeepSeek-R1-Distill-Qwen-7B \
+VLLM_MODEL_ORG=deepseek-ai \
+  flox activate --start-services
 ```
 
-The server binds to `127.0.0.1:8000` by default. The default model is `meta-llama/Llama-3.1-8B-Instruct`.
-
-## Swapping Models
-
-vLLM serves one model at a time per process. To switch models:
-
-**Option 1: Override at activation time**
+### Verify it's running
 
 ```bash
-VLLM_MODEL=mistralai/Mistral-7B-Instruct-v0.3 flox activate -d /home/daedalus/dev/vllm-runtime --start-services
+# Health check (no auth required)
+curl http://127.0.0.1:8000/health
+
+# List loaded models
+curl http://127.0.0.1:8000/v1/models \
+  -H "Authorization: Bearer sk-vllm-local-dev"
+
+# Chat completion
+curl http://127.0.0.1:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-vllm-local-dev" \
+  -d '{
+    "model": "Llama-3.1-8B-Instruct",
+    "messages": [{"role": "user", "content": "Hello!"}],
+    "max_tokens": 256
+  }'
 ```
 
-**Option 2: Edit the manifest and restart**
+## Architecture
 
-```bash
-# Edit VLLM_MODEL in .flox/env/manifest.toml [vars] section
-flox services restart vllm
-```
-
-### Model Sizing Reference
-
-What fits depends on total VRAM across all GPUs used for tensor parallelism.
-
-**Single GPU (24GB — e.g., RTX 5090, RTX 4090, A10G):**
-
-| Model | Precision | Approx max-model-len |
-|-------|-----------|---------------------|
-| Llama 3.1 8B / Mistral 7B / Qwen 2.5 7B | BF16 (full) | up to 32K |
-| Llama 3.1 13B / Qwen 2.5 14B | AWQ/GPTQ 4-bit | up to 16K |
-| Llama 3.1 70B | AWQ 4-bit | ~4K |
-
-**2x GPUs (48GB total — TP=2, e.g., 2× RTX 5090):**
-
-| Model | Precision | Approx max-model-len |
-|-------|-----------|---------------------|
-| Llama 3.1 8B / Mistral 7B | BF16 (full) | up to native max |
-| Llama 3.1 13B / Qwen 2.5 14B | BF16 (full) | up to 32K |
-| Llama 3.1 70B | AWQ 4-bit | up to 16K |
-
-**4x GPUs (96GB total — TP=4, e.g., 4× RTX 5090):**
-
-| Model | Precision | Approx max-model-len |
-|-------|-----------|---------------------|
-| Llama 3.1 13B / Qwen 2.5 14B | BF16 (full) | up to native max |
-| Llama 3.1 70B | AWQ 4-bit | up to 32K+ |
-
-**Larger configurations (e.g., 2× A100 80GB = 160GB, 8× H100 80GB = 640GB):**
-
-| GPUs | Model | Precision | Approx max-model-len |
-|------|-------|-----------|---------------------|
-| 2× A100 80GB (TP=2) | Llama 3.1 70B | BF16 (full) | up to 8K |
-| 4× A100 80GB (TP=4) | Llama 3.1 70B | BF16 (full) | up to 32K |
-| 8× H100 80GB (TP=8) | Llama 3.1 405B | AWQ 4-bit | up to 16K |
-| 8× H100 80GB (TP=8) | Llama 3.1 405B | FP8 | up to 8K |
-
-Note: Llama 3.1 70B at BF16 requires ~140GB for weights alone — it needs at least 2× 80GB GPUs or 8× 24GB GPUs. Llama 3.1 405B at AWQ 4-bit requires ~202GB — it needs at least 4× 80GB GPUs.
-
-To increase `max-model-len` for smaller models, edit `config.yaml`.
-
-## Multi-GPU (Tensor and Pipeline Parallelism)
-
-This environment supports single-machine multi-GPU via two parallelism modes, controlled by environment variables in the manifest:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `VLLM_TENSOR_PARALLEL_SIZE` | `1` | Shard weight matrices within each layer across N GPUs (most common) |
-| `VLLM_PIPELINE_PARALLEL_SIZE` | `1` | Distribute layers across N GPUs in pipeline stages (for very large models) |
-
-**Tensor parallelism (TP)** is the standard approach — it shards each layer's weights across GPUs and requires NVLink or PCIe for inter-GPU communication. Use TP when all GPUs are identical and directly connected.
-
-**Pipeline parallelism (PP)** assigns different layers to different GPUs sequentially. It uses less inter-GPU bandwidth but adds pipeline bubbles. Use PP when GPUs differ in size or when combining with TP (e.g., TP=2 PP=2 for 4 GPUs).
-
-### Examples
-
-```bash
-# 2x GPU tensor parallel
-VLLM_TENSOR_PARALLEL_SIZE=2 flox activate -d /home/daedalus/dev/vllm-runtime --start-services
-
-# 4x GPU tensor parallel
-VLLM_TENSOR_PARALLEL_SIZE=4 flox activate -d /home/daedalus/dev/vllm-runtime --start-services
-
-# 4x GPU hybrid: 2-way tensor parallel × 2-way pipeline parallel
-VLLM_TENSOR_PARALLEL_SIZE=2 VLLM_PIPELINE_PARALLEL_SIZE=2 flox activate -d /home/daedalus/dev/vllm-runtime --start-services
-```
-
-Or set the defaults in the manifest `[vars]` section and restart:
-
-```bash
-flox services restart vllm
-```
-
-### Constraints
-
-- TP size must evenly divide the model's attention heads (e.g., Llama 70B has 64 heads — TP=1, 2, 4, 8 all work; TP=3 doesn't)
-- TP × PP must equal the total number of GPUs you want to use
-- All GPUs in a TP group should be the same model (mixed GPU types cause the slowest GPU to bottleneck)
-- `gpu-memory-utilization` in `config.yaml` applies per GPU
-
-### Multi-Node (Distributed)
-
-For deployments spanning multiple machines, vLLM uses Ray for distributed execution. This is a fundamentally different topology from single-node multi-GPU and is outside the scope of `vllm-runtime/`.
-
-**How vLLM uses Ray for multi-node:**
-
-On a single machine, vLLM uses Python multiprocessing + NCCL for GPU communication — no Ray involved. When a model is too large for one machine's GPUs (or you want to scale throughput across nodes), vLLM delegates to Ray:
-
-- **Ray head node** — runs the Ray GCS (Global Control Store), the dashboard, and coordinates worker placement. The vLLM API server runs here.
-- **Ray worker nodes** — each node runs a Ray worker process that spawns vLLM engine workers. Each worker owns one or more local GPUs.
-- **NCCL across nodes** — the actual tensor communication uses NCCL over InfiniBand or RoCE (RDMA over Converged Ethernet), not Ray's object store. Ray just gets the processes running and connected; NCCL handles the fast path.
-
-A standalone `vllm-distributed/` Flox environment would need:
-- `ray` package alongside `vllm`
-- Separate services for Ray head vs. Ray worker roles (or role selection via an env var)
-- Network configuration: `RAY_ADDRESS`, `NCCL_SOCKET_IFNAME`, `NCCL_IB_HCA` for InfiniBand
-- Shared model storage (NFS mount, S3 with `HF_HUB_OFFLINE=1`, or pre-downloaded per node)
-- Per-node GPU visibility: `CUDA_VISIBLE_DEVICES` or resource scheduling
-
-#### Multi-Node on Kubernetes with KubeRay + Flox Uncontained
-
-The production path for multi-node vLLM is Kubernetes with the [KubeRay operator](https://docs.ray.io/en/latest/cluster/kubernetes/getting-started.html) — and Flox's [Kubernetes, Uncontained](https://flox.dev/blog/kubernetes-uncontained) pattern eliminates the biggest pain point: building and distributing multi-gigabyte CUDA container images.
-
-**Why this combination works:**
-
-KubeRay manages the Ray cluster lifecycle — it creates `RayCluster` CRDs that define head and worker pod templates, handles autoscaling based on pending Ray tasks, and manages failover. Normally, each pod pulls a 15-30GB container image containing CUDA, PyTorch, vLLM, and the model weights.
-
-With Flox Uncontained, those pods use `runtimeClassName: flox` instead. The Flox containerd shim realizes the environment from a Flox environment reference (a single annotation), pulling only the packages that aren't already in the node-local immutable store. On a warm node — one that has previously run a vLLM pod — startup is near-instant because CUDA libraries, PyTorch, and vLLM are already cached.
-
-This is significant for GPU workloads specifically:
-
-- **No image bloat** — CUDA toolkit (~3GB), PyTorch (~2GB), and vLLM with compiled kernels (~1GB) are stored once per node in hash-addressed paths, not duplicated across image layers
-- **Fast scale-up** — when KubeRay autoscaler adds worker pods, they mount cached dependencies immediately instead of pulling a fresh 20GB image
-- **Atomic dependency updates** — updating vLLM or a CUDA dependency is a one-line Flox manifest change pushed to FloxHub, not an image rebuild + registry push + rolling restart
-- **Same environment dev-to-prod** — the same Flox environment that runs on a developer's workstation (this `vllm-runtime/`) runs inside Kubernetes pods, bit-for-bit identical
-
-**Architecture on Kubernetes:**
+The service command chains three scripts in a pipeline:
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  Kubernetes Cluster                                             │
-│                                                                 │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │  KubeRay Operator                                         │  │
-│  │  Manages RayCluster CRD, autoscaling, failover            │  │
-│  └───────────────────────────────────────────────────────────┘  │
-│                                                                 │
-│  ┌─────────────────────┐  ┌─────────────────────┐              │
-│  │  Ray Head Pod        │  │  Ray Worker Pod (×N) │              │
-│  │  runtimeClass: flox  │  │  runtimeClass: flox  │              │
-│  │                      │  │                      │              │
-│  │  ┌────────────────┐  │  │  ┌────────────────┐  │              │
-│  │  │ Flox env:       │  │  │  │ Flox env:       │  │              │
-│  │  │  vllm + ray     │  │  │  │  vllm + ray     │  │              │
-│  │  │  cuda 12.9      │  │  │  │  cuda 12.9      │  │              │
-│  │  │  python 3.12    │  │  │  │  python 3.12    │  │              │
-│  │  └────────────────┘  │  │  └────────────────┘  │              │
-│  │                      │  │                      │              │
-│  │  vLLM API server     │  │  vLLM engine worker  │              │
-│  │  Ray GCS + dashboard │  │  NCCL ←──────────────┤── IB/RoCE   │
-│  │  Port 8000           │  │  GPU: 0..M           │              │
-│  └─────────────────────┘  └─────────────────────┘              │
-│                                                                 │
-│  Node-local Flox store: /nix/store/<hash>-vllm-0.15.1/...      │
-│  (shared read-only across all pods on the node)                 │
-└─────────────────────────────────────────────────────────────────┘
+vllm-preflight && vllm-resolve-model && vllm-serve
 ```
 
-**Example KubeRay RayCluster with Flox:**
-
-```yaml
-apiVersion: ray.io/v1
-kind: RayCluster
-metadata:
-  name: vllm-cluster
-spec:
-  headGroupSpec:
-    rayStartParams:
-      dashboard-host: "0.0.0.0"
-    template:
-      metadata:
-        annotations:
-          flox.dev/environment: "myorg/vllm-runtime:latest"
-      spec:
-        runtimeClassName: flox
-        containers:
-          - name: ray-head
-            image: flox/empty:1.0.0
-            command: ["vllm", "serve", "meta-llama/Llama-3.1-70B-Instruct",
-                      "--tensor-parallel-size", "8",
-                      "--config", "/app/config.yaml"]
-            resources:
-              limits:
-                nvidia.com/gpu: "0"   # head doesn't need a GPU
-            ports:
-              - containerPort: 8000   # vLLM API
-              - containerPort: 6379   # Ray GCS
-              - containerPort: 8265   # Ray dashboard
-        nodeSelector:
-          flox.dev/enabled: "true"
-
-  workerGroupSpecs:
-    - replicas: 2
-      minReplicas: 1
-      maxReplicas: 4
-      groupName: gpu-workers
-      rayStartParams: {}
-      template:
-        metadata:
-          annotations:
-            flox.dev/environment: "myorg/vllm-runtime:latest"
-        spec:
-          runtimeClassName: flox
-          containers:
-            - name: ray-worker
-              image: flox/empty:1.0.0
-              resources:
-                limits:
-                  nvidia.com/gpu: "4"
-          nodeSelector:
-            flox.dev/enabled: "true"
-            nvidia.com/gpu.product: "NVIDIA-H100-80GB-HBM3"
+```
+┌──────────────────────────────────────────────────────┐
+│  Consuming Environment (.flox/env/manifest.toml)     │
+│                                                      │
+│  [install]                                           │
+│    flox/vllm-flox-runtime       # 3-script pipeline  │
+│    flox/vllm-python312-cuda*    # vLLM + CUDA        │
+│    (optional) flox/vllm-flox-monitoring              │
+│                                                      │
+│  [services]                                          │
+│    vllm → vllm-preflight                             │
+│           && vllm-resolve-model                      │
+│           && vllm-serve                              │
+│                                                      │
+│  ┌─────────────────────────────────────────────────┐ │
+│  │  vllm-preflight                                 │ │
+│  │    Port reclaim ← /proc/net/tcp + /proc/<pid>/  │ │
+│  │    GPU health   ← torch → nvidia-smi → skip     │ │
+│  ├─────────────────────────────────────────────────┤ │
+│  │  vllm-resolve-model                             │ │
+│  │    Sources: flox → local → hf-cache → r2 → hub │ │
+│  │    Output: per-model .env file (mode 600)       │ │
+│  ├─────────────────────────────────────────────────┤ │
+│  │  vllm-serve                                     │ │
+│  │    Loads .env → validates args → exec vllm serve│ │
+│  └─────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────┘
 ```
 
-Key details in this manifest:
-- `image: flox/empty:1.0.0` — the 49-byte stub image required by CRI/OCI; the actual environment comes from the `flox.dev/environment` annotation
-- `flox.dev/environment` — references the Flox environment published to FloxHub; this is the same environment definition as `vllm-runtime/`, extended with `ray`
-- `runtimeClassName: flox` — routes pod startup through the Flox containerd shim
-- Worker pods request 4 GPUs each via `nvidia.com/gpu`; the NVIDIA device plugin and KubeRay handle GPU assignment
-- KubeRay autoscaler can add workers (up to `maxReplicas`) when vLLM's request queue grows
+1. **vllm-preflight** — Reclaims the port if occupied by a stale vLLM process, checks GPU health via torch or nvidia-smi, optionally executes a downstream command.
+2. **vllm-resolve-model** — Provisions the model from configured sources with locking and atomic swaps, validates the model directory (config, tokenizer, weight shards), writes a per-model env file.
+3. **vllm-serve** — Loads the env file (safe or trusted mode), validates all required vars, builds the `vllm serve` argv from env vars + `config.yaml`, and `exec`s.
 
-**Flox environment for Kubernetes multi-node (`vllm-distributed/manifest.toml`):**
+Scripts are provided by the `flox/vllm-flox-runtime` package (~1,700 lines of hardened Bash) and available on `PATH` after activation.
 
-```toml
-version = 1
+## API reference
 
-[install]
-vllm-python312-cuda12_9-sm90.pkg-path = "flox/vllm-python312-cuda12_9-sm90"
-vllm-python312-cuda12_9-sm90.pkg-group = "vllm-python312-cuda12_9-sm90"
-ray.pkg-path = "ray"
+The server exposes an OpenAI-compatible API. All authenticated endpoints require the `Authorization: Bearer <VLLM_API_KEY>` header.
 
-[vars]
-VLLM_MODEL = "meta-llama/Llama-3.1-70B-Instruct"
-VLLM_HOST = "0.0.0.0"
-VLLM_PORT = "8000"
-VLLM_TENSOR_PARALLEL_SIZE = "8"
-VLLM_PIPELINE_PARALLEL_SIZE = "1"
-NCCL_SOCKET_IFNAME = "eth0"
-HF_HOME = "/models"
-```
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/health` | `GET` | No | Health check. Returns `200 OK` when ready |
+| `/v1/models` | `GET` | Yes | List loaded models |
+| `/v1/chat/completions` | `POST` | Yes | Chat completions (streaming supported) |
+| `/v1/completions` | `POST` | Yes | Text completions (streaming supported) |
+| `/metrics` | `GET` | No | Prometheus metrics |
 
-This environment would be published to FloxHub and referenced by the KubeRay pod templates. The SM variant (`sm90` for H100 in this example) would be chosen based on the target GPU hardware in the cluster.
-
-## Downloading Models for Offline Use
-
-Pre-download a model so it's available without internet access:
-
-```bash
-flox activate -d /home/daedalus/dev/vllm-runtime
-huggingface-cli download meta-llama/Llama-3.1-8B-Instruct
-```
-
-Models are cached in `./models/` (the `HF_HOME` directory).
-
-## API Endpoints
-
-The server exposes an OpenAI-compatible API:
-
-| Endpoint | Description |
-|----------|-------------|
-| `POST /v1/chat/completions` | Chat completions (streaming supported) |
-| `POST /v1/completions` | Text completions |
-| `GET /v1/models` | List loaded models |
-| `GET /health` | Health check |
-| `GET /metrics` | Prometheus metrics |
-
-### Example: Chat Completion
+### Chat completion
 
 ```bash
 curl http://127.0.0.1:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer sk-vllm-local-dev" \
   -d '{
-    "model": "default",
-    "messages": [{"role": "user", "content": "Hello!"}],
-    "max_tokens": 256
+    "model": "Llama-3.1-8B-Instruct",
+    "messages": [
+      {"role": "system", "content": "You are a helpful assistant."},
+      {"role": "user", "content": "Explain TCP in one paragraph."}
+    ],
+    "max_tokens": 256,
+    "temperature": 0.7
   }'
 ```
 
-### Example: Health Check
+### Streaming
 
 ```bash
-curl http://127.0.0.1:8000/health
+curl --no-buffer http://127.0.0.1:8000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-vllm-local-dev" \
+  -d '{
+    "model": "Llama-3.1-8B-Instruct",
+    "messages": [{"role": "user", "content": "Write a haiku about CUDA."}],
+    "max_tokens": 64,
+    "stream": true
+  }'
 ```
 
-## Configuration
+### Text completion
 
-Server settings are in `config.yaml`. Key parameters:
+```bash
+curl http://127.0.0.1:8000/v1/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-vllm-local-dev" \
+  -d '{
+    "model": "Llama-3.1-8B-Instruct",
+    "prompt": "The capital of France is",
+    "max_tokens": 32
+  }'
+```
 
-| Parameter | Default | Notes |
-|-----------|---------|-------|
-| `gpu-memory-utilization` | 0.92 | Per-GPU VRAM fraction for KV cache. 0.92 for 24GB, 0.95 for 48GB+ |
-| `max-model-len` | 8192 | Conservative default; increase for smaller models or more VRAM |
-| `dtype` | auto | BF16 for BF16 models, FP16 for FP16/FP32 |
-| `host` | 127.0.0.1 | Localhost only; use the proxy env for external access |
+## Configuration reference
 
-Parallelism and model selection are environment variables in `.flox/env/manifest.toml` `[vars]`:
+Settings are split between a static config file and runtime environment variables.
 
-| Variable | Default | Notes |
-|----------|---------|-------|
-| `VLLM_MODEL` | `meta-llama/Llama-3.1-8B-Instruct` | HuggingFace model ID or local path |
-| `VLLM_TENSOR_PARALLEL_SIZE` | `1` | Number of GPUs for tensor parallelism |
-| `VLLM_PIPELINE_PARALLEL_SIZE` | `1` | Number of GPUs for pipeline parallelism |
+### Static settings (`config.yaml`)
+
+These settings are read by `vllm-serve` and passed directly to `vllm serve` via `--config`. They are not overridable at activation time.
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `host` | `127.0.0.1` | Bind address |
+| `port` | `8000` | HTTP listen port |
+| `dtype` | `auto` | Weight data type. `auto` selects BF16 for BF16 models, FP16 for FP16/FP32 models |
+| `gpu-memory-utilization` | `0.92` | Per-GPU VRAM fraction for KV cache. 0.92 is aggressive but stable for 24 GB cards (~2 GB headroom for CUDA context). Use 0.95 for 48 GB+ cards. Reduce if you see OOM during prefill |
+| `disable-log-requests` | `true` | Suppress per-request logging |
+| `uvicorn-log-level` | `warning` | Uvicorn server log level |
+
+### Runtime environment variables (on-activate hook)
+
+All vars use `${VAR:-default}` in the on-activate hook so they can be overridden at activation time:
+
+```bash
+VLLM_MAX_MODEL_LEN=16384 VLLM_KV_CACHE_DTYPE=fp8 flox activate --start-services
+```
+
+#### Model settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VLLM_MODEL` | `Llama-3.1-8B-Instruct` | Model directory name. Must be a single safe path element (no `/`, `\`, `.`, `..`, or control characters) |
+| `VLLM_MODEL_ORG` | `meta-llama` | HuggingFace org. Used to derive the model ID as `$VLLM_MODEL_ORG/$VLLM_MODEL` when `VLLM_MODEL_ID` is not set |
+| `VLLM_MODEL_SOURCES` | `local,hf-cache,hf-hub` | Comma-separated source order for model provisioning. Available sources: `flox`, `local`, `hf-cache`, `r2`, `hf-hub` |
+| `VLLM_MODELS_DIR` | `$FLOX_ENV_PROJECT/models` | Root directory for model storage and HF cache. Created automatically on activation |
+| `VLLM_SERVED_MODEL_NAME` | `$VLLM_MODEL` | Model name returned in `/v1/models` responses and used in API requests |
+
+#### Server settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VLLM_HOST` | `127.0.0.1` | Server bind address |
+| `VLLM_PORT` | `8000` | Server listen port. Must be 1-65535 |
 | `VLLM_API_KEY` | `sk-vllm-local-dev` | Bearer token for API authentication |
-| `HF_HOME` | `$FLOX_ENV_PROJECT/models` | HuggingFace model cache directory |
 
-## Service Management
+#### Engine tuning
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VLLM_TENSOR_PARALLEL_SIZE` | `1` | Number of GPUs for tensor parallelism. Must be > 0 |
+| `VLLM_PIPELINE_PARALLEL_SIZE` | `1` | Number of GPUs for pipeline parallelism. Must be > 0 |
+| `VLLM_PREFIX_CACHING` | `false` | Automatic prefix caching. Accepts `true`/`false`/`1`/`0`/`yes`/`no` |
+| `VLLM_KV_CACHE_DTYPE` | `auto` | KV cache precision. `auto` matches model dtype; `fp8` halves KV cache memory at minor quality cost. Must not contain whitespace |
+| `VLLM_MAX_MODEL_LEN` | `4096` | Max sequence length (input + output tokens). Must not exceed the model's native context length. Lower values reduce memory. Must be > 0 |
+| `VLLM_MAX_NUM_BATCHED_TOKENS` | `4096` | Chunked prefill budget. Increase for throughput at the cost of higher per-request latency. Must be > 0 |
+
+#### Logging and metrics
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VLLM_LOGGING_LEVEL` | `WARNING` | vLLM Python log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+| `PROMETHEUS_MULTIPROC_DIR` | `/tmp/vllm-prometheus` | Directory for Prometheus client multiprocess metrics. Created automatically on activation |
+
+## Model provisioning (`vllm-resolve-model`)
+
+Searches configured sources in order, validates the model directory, and writes an env file that `vllm-serve` loads. The first source that produces a valid model wins.
+
+### Source table
+
+Sources are tried in the order specified by `VLLM_MODEL_SOURCES`. The script's internal default is `flox,local,hf-cache,r2,hf-hub`; the manifest overrides this to `local,hf-cache,hf-hub`.
+
+| Source | What it checks | Skip condition | Resolution |
+|--------|---------------|----------------|------------|
+| `flox` | `$FLOX_ENV/share/models/hub/models--<slug>/snapshots/` | `FLOX_ENV` not set | Sets `HF_HOME` to the flox package model path |
+| `local` | `$VLLM_MODELS_DIR/<VLLM_MODEL>/` | Directory missing or fails validation | Sets `VLLM_MODEL_PATH` to the local directory |
+| `hf-cache` | `$VLLM_MODELS_DIR/hub/models--<slug>/snapshots/` | No usable snapshot found | Sets `HF_HOME` to `$VLLM_MODELS_DIR` |
+| `r2` | Downloads from `s3://$R2_BUCKET/$R2_MODELS_PREFIX/$VLLM_MODEL/` | `aws` CLI missing, `R2_BUCKET`/`R2_MODELS_PREFIX` not set, or credentials fail | Stages to temp dir, validates, atomic-swaps into `$VLLM_MODELS_DIR/<VLLM_MODEL>/` |
+| `hf-hub` | Downloads from HuggingFace Hub using `hf`/`huggingface-cli`/`python3` | No download tool found | Stages to temp dir, validates, atomic-swaps into `$VLLM_MODELS_DIR/<VLLM_MODEL>/` |
+
+### Environment variables
+
+**Required:**
+
+| Variable | Description |
+|----------|-------------|
+| `VLLM_MODEL` | Model name (single safe path element) |
+| `VLLM_MODELS_DIR` | Base directory for local models and HF cache |
+
+**Optional:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VLLM_MODEL_ID` | Derived from `$VLLM_MODEL_ORG/$VLLM_MODEL` | Explicit HuggingFace model ID (`org/name`). When empty, derived from `VLLM_MODEL_ORG` (which must then be set) |
+| `VLLM_MODEL_ORG` | _(none; manifest sets `meta-llama`)_ | Org prefix for deriving model ID. Required when `VLLM_MODEL_ID` is empty |
+| `VLLM_MODEL_SOURCES` | `flox,local,hf-cache,r2,hf-hub` | Comma-separated source order |
+| `FLOX_ENV` | _(set by Flox)_ | Flox environment path. Required for `flox` source |
+| `FLOX_ENV_CACHE` | _(set by Flox)_ | Cache directory for env files. Required when `VLLM_MODEL_ENV_FILE` is not set |
+| `VLLM_MODEL_ENV_FILE` | `$FLOX_ENV_CACHE/vllm-model.<slug>.<hash>.env` | Override env file output path |
+| `R2_BUCKET` | _(none)_ | Cloudflare R2 bucket name. Required for `r2` source |
+| `R2_MODELS_PREFIX` | _(none)_ | R2 key prefix for models. Required for `r2` source |
+| `R2_ENDPOINT_URL` | _(none)_ | AWS CLI endpoint URL for R2 |
+| `VLLM_RESOLVE_LOCK_TIMEOUT` | `300` | Seconds to wait for the per-model lock |
+| `VLLM_SKIP_TOKENIZER_CHECK` | `0` | Set to `1` to skip tokenizer asset validation |
+| `VLLM_KEEP_LOGS` | `0` | Set to `1` to keep download logs even on success. Logs are always kept on failure |
+| `HF_TOKEN` | _(none)_ | HuggingFace token for gated model access (Llama, Gemma, etc.) |
+
+### Model validation
+
+Every candidate model directory must pass three checks before it is accepted:
+
+1. **`config.json`** — must exist at the directory root.
+2. **Tokenizer assets** — at least one recognized tokenizer file must exist in `<dir>/`, `<dir>/tokenizer/`, or `<dir>/tokenizer_files/`. Recognized files:
+   - `tokenizer.json`, `tokenizer.model`, `spiece.model`
+   - `vocab.json` + `merges.txt`
+   - `vocab.txt`
+   - `tokenizer_config.json` + (`vocab.json` or `vocab.txt`)
+   - Skip this check with `VLLM_SKIP_TOKENIZER_CHECK=1`.
+3. **Weight shards** — determined by the presence of shard index files:
+   - If `*.index.json` exists: all shard files referenced in `weight_map` must exist.
+   - If no index but `-00001-of-NNNNN` pattern detected: all N shards must exist.
+   - Otherwise: at least one weight-like file (`.safetensors`, `.bin`, `.pt`, `.pth`, `.gguf`) must exist.
+
+### Env file output
+
+Written atomically (mktemp + mv) to `$FLOX_ENV_CACHE/vllm-model.<slug>.<hash12>.env` with mode `600` (umask `077`). Contains:
 
 ```bash
-# Check status
-flox services status
+# generated by vllm-resolve-model
+export HF_HOME='/path/to/hf/home'           # when resolved via flox or hf-cache
+export VLLM_MODEL='Llama-3.1-8B-Instruct'
+export VLLM_MODEL_ID='meta-llama/Llama-3.1-8B-Instruct'
+export VLLM_MODEL_PATH='/path/to/models/Llama-3.1-8B-Instruct'  # when resolved locally
+export _VLLM_RESOLVED_MODEL='meta-llama/Llama-3.1-8B-Instruct'
+export _VLLM_RESOLVED_VIA='hf-hub'
+```
 
-# View logs
-flox services logs vllm
+The `<slug>` is the model ID with unsafe characters mapped to `-`. The `<hash12>` is the first 12 hex chars of SHA-256 of the model ID, computed using whichever is available: `sha256sum`, `shasum`, `openssl`, or `python3`.
 
-# Restart after config changes
+### Gated models
+
+Models that require authentication (Llama, Gemma, Mistral) need a HuggingFace token:
+
+```bash
+HF_TOKEN=hf_... flox activate --start-services
+```
+
+### Offline operation
+
+Restrict sources to avoid network access:
+
+```bash
+VLLM_MODEL_SOURCES=local flox activate --start-services           # local only
+VLLM_MODEL_SOURCES=local,hf-cache flox activate --start-services  # local + cached
+```
+
+### Locking and atomic swap
+
+- **Per-model lock**: acquired before any source search. Uses `flock` if available, falls back to `mkdir`-based locking with stale PID detection. Timeout: `VLLM_RESOLVE_LOCK_TIMEOUT` seconds (default 300).
+- **Atomic swap** (r2 and hf-hub only): downloads stage into a temp directory under `$VLLM_MODELS_DIR/.staging/`. After validation, the staged directory replaces the target via backup+rename. If interrupted, the next run restores the newest backup automatically.
+
+## Pre-flight (`vllm-preflight`)
+
+Pre-flight validation: reclaims the vLLM port if occupied, checks GPU health, and optionally executes a downstream command.
+
+**Platform**: Linux only (requires `/proc`).
+
+### Usage
+
+```bash
+vllm-preflight                        # checks only
+vllm-preflight ./start.sh arg1 arg2   # checks, then exec command
+vllm-preflight -- python -m vllm ...  # checks, then exec command (after --)
+```
+
+### Exit codes
+
+Stable contract — these codes are safe to match on programmatically.
+
+| Code | Meaning | When |
+|------|---------|------|
+| `0` | Success | Port free (or reclaimed), GPU OK, downstream command exec'd |
+| `1` | Validation error | Bad env var value, GPU hard failure, bad config, `python3` not found |
+| `2` | Port owned by non-vLLM process | A non-vLLM listener holds the port. Will not kill |
+| `3` | Different UID | vLLM process on the port belongs to another user. Will not kill (unless `VLLM_ALLOW_KILL_OTHER_UID=1`) |
+| `4` | Not attributable | Listener found but cannot map socket inodes to PIDs (permissions / hidepid) |
+| `5` | Stop failed | Sent SIGTERM/SIGKILL but port is still listening after timeout |
+
+In `--dry-run` mode (`VLLM_DRY_RUN=1`), exit codes are `0`/`2`/`3`/`4` only (never `5`, since nothing is killed).
+
+### Environment variables
+
+| Variable | Default | Validation | Description |
+|----------|---------|------------|-------------|
+| `VLLM_HOST` | `127.0.0.1` | — | Bind address to check |
+| `VLLM_PORT` | `8000` | Integer, 1-65535 | Port to check and reclaim |
+| `VLLM_OWNER_REGEX` | _(built-in heuristic)_ | Valid regex | Regex to identify vLLM owner processes. Matched against `/proc/<pid>/cmdline` and `/proc/<pid>/exe`. See example below |
+| `VLLM_DRY_RUN` | `0` | `0` or `1` | Report what would happen without sending signals |
+| `VLLM_GPU_WARN_PCT` | `50` | Numeric, 0-100 | Warn if GPU memory usage exceeds this percentage before vLLM starts |
+| `VLLM_SKIP_GPU_CHECK` | `0` | `0` or `1` | Skip all GPU checks |
+| `VLLM_REQUIRE_TORCH` | `0` | `0` or `1` | Fail (exit 1) if `import torch` fails. Default: fall through to nvidia-smi |
+| `VLLM_ALLOW_KILL_OTHER_UID` | `0` | `0` or `1` | Allow killing vLLM processes owned by other UIDs |
+| `VLLM_PREFLIGHT_LOCKFILE` | `/tmp/vllm-preflight.lock` | — | Lock file path. Checked for symlink and regular-file safety |
+| `VLLM_TERM_GRACE` | `3` | Numeric, >= 0 | Seconds to wait after SIGTERM before sending SIGKILL |
+| `VLLM_PORT_FREE_TIMEOUT` | `10` | Numeric, >= 0 | Seconds to wait for the port to become free after killing |
+| `VLLM_PORT_FREE_POLL` | `0.5` | Numeric, > 0 | Poll interval (seconds) while waiting for port to free |
+| `VLLM_PREFLIGHT_JSON` | `0` | `0` or `1` | Print a single JSON object on stdout. Incompatible with downstream command exec |
+
+`VLLM_OWNER_REGEX` example for unusual launchers:
+
+```bash
+VLLM_OWNER_REGEX='vllm(\.entrypoints|.*serve)|openai\.api_server'
+```
+
+### Port reclaim behavior
+
+1. Parses `/proc/net/tcp` and `/proc/net/tcp6` for LISTEN-state sockets matching the configured host and port (including wildcard `0.0.0.0`/`::` catchall).
+2. Maps socket inodes to PIDs via `/proc/<pid>/fd/` symlink scanning.
+3. Reads `/proc/<pid>/cmdline` and `/proc/<pid>/exe` to classify each listener as vLLM or non-vLLM:
+   - **Built-in heuristic**: matches `vllm` in cmdline AND one of: `vllm.entrypoints`, `openai.api_server`, `entrypoints.openai`, or `serve` keywords; also accepts `python` in exe path.
+   - **Custom regex**: set `VLLM_OWNER_REGEX` for unusual launchers.
+4. **Non-vLLM listener** → exit 2 (refuses to kill).
+5. **Different UID** → exit 3 (unless `VLLM_ALLOW_KILL_OTHER_UID=1`).
+6. **Unmappable inodes** → exit 4 (e.g., hidepid restrictions).
+7. **Own vLLM** → builds process tree via `/proc/<pid>/stat` parent chain, sends SIGTERM to all descendants (post-order), waits `VLLM_TERM_GRACE` seconds, then SIGKILL any survivors.
+8. Polls until port is free or `VLLM_PORT_FREE_TIMEOUT` expires. If still listening → exit 5.
+
+### GPU health check
+
+Runs after port reclaim. Cascade:
+
+1. **torch available**: `import torch` → `torch.cuda.is_available()` → enumerate GPUs, report free/total VRAM, warn if usage > `VLLM_GPU_WARN_PCT`. Exit 1 if no CUDA GPUs.
+2. **torch unavailable + `VLLM_REQUIRE_TORCH=1`**: exit 1.
+3. **torch unavailable + nvidia-smi available**: query `nvidia-smi --query-gpu=name,memory.total,memory.free`. Warn if usage > threshold. If nvidia-smi fails, soft-skip with warning.
+4. **Neither torch nor nvidia-smi**: log warning, continue.
+
+### JSON output mode
+
+When `VLLM_PREFLIGHT_JSON=1`, a single JSON object is printed to stdout. Human-readable logs still go to stderr. Incompatible with downstream command execution.
+
+Examples:
+
+```json
+{"status":"ok","action":"noop","dry_run":false}
+{"status":"ok","action":"stopped","dry_run":false,"pids":[12345,12346]}
+{"status":"ok","action":"would_stop","dry_run":true,"pids":[12345]}
+```
+
+### Locking
+
+Prevents two concurrent preflight runs from racing on the same port:
+
+- **flock** (preferred): opens `$VLLM_PREFLIGHT_LOCKFILE` with `flock -n`. Validates the lockfile is not a symlink and is a regular file.
+- **mkdir fallback**: creates `$VLLM_PREFLIGHT_LOCKFILE.d/` atomically. Detects stale locks via PID file.
+
+## Serving (`vllm-serve`)
+
+Loads the resolved model env file and executes `vllm serve` with validated arguments.
+
+### Usage
+
+```bash
+vllm-serve                           # standard launch
+vllm-serve --print-cmd               # print the vllm serve argv to stderr, then exec
+vllm-serve --dry-run                 # print the argv to stderr and exit 0 (no exec)
+vllm-serve -h                        # show help
+vllm-serve -- --extra-flag val       # pass extra args through to vllm serve
+```
+
+### Required environment variables
+
+**Always required:**
+
+| Variable | Validation | Description |
+|----------|------------|-------------|
+| `FLOX_ENV_PROJECT` | Must be a directory | Project root (for `config.yaml`). Not required if `VLLM_CONFIG_FILE` is set |
+| `VLLM_TENSOR_PARALLEL_SIZE` | Positive integer | Tensor parallelism GPU count |
+| `VLLM_PIPELINE_PARALLEL_SIZE` | Positive integer | Pipeline parallelism GPU count |
+| `VLLM_KV_CACHE_DTYPE` | Non-empty, no whitespace | KV cache dtype (e.g., `auto`, `fp8`) |
+| `VLLM_MAX_MODEL_LEN` | Positive integer | Max sequence length |
+| `VLLM_MAX_NUM_BATCHED_TOKENS` | Positive integer | Chunked prefill budget |
+| `VLLM_SERVED_MODEL_NAME` | Non-empty | Model name for API responses |
+
+**Required when `VLLM_MODEL_ENV_FILE` is not set** (the standard case):
+
+| Variable | Description |
+|----------|-------------|
+| `FLOX_ENV_CACHE` | Cache directory. Must exist as a directory |
+| `VLLM_MODEL_ID` | Full model ID (`org/model`), OR `VLLM_MODEL_ORG` + `VLLM_MODEL` must both be set |
+
+### Optional environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VLLM_MODEL_ENV_FILE` | Derived from `FLOX_ENV_CACHE` + model ID | Explicit env file path. Bypasses the standard derivation |
+| `VLLM_PREFIX_CACHING` | `false` | Enable automatic prefix caching. Accepts `true`/`false`/`1`/`0`/`yes`/`no` |
+| `VLLM_CONFIG_FILE` | `$FLOX_ENV_PROJECT/config.yaml` | Override config file path |
+| `VLLM_ENV_FILE_TRUSTED` | `false` | Skip safe-mode env file parsing and `source` the file directly. Accepts `true`/`false`/`1`/`0`/`yes`/`no` |
+
+### Env file loading
+
+Two modes:
+
+**Safe mode** (default, `VLLM_ENV_FILE_TRUSTED=false`): The env file is parsed by a Python script that enforces a restricted `.env` subset:
+- Lines must be `KEY=VALUE` or `export KEY=VALUE`.
+- Values may be single-quoted, double-quoted, or unquoted.
+- Double-quoted values support `\\`, `\"`, `\n`, `\t` escapes.
+- Trailing `# comments` are allowed after quoted values.
+- No multiline values, no `${VAR}` interpolation, no command substitution.
+- Generates sanitized `export KEY='value'` lines, then `source`s the sanitized output.
+- Requires `python3` (or `python`) on PATH.
+
+**Trusted mode** (`VLLM_ENV_FILE_TRUSTED=true`): The env file is `source`d directly as shell code. Only use this if you fully trust the env file contents.
+
+The env file must define `_VLLM_RESOLVED_MODEL` or `vllm-serve` exits with an error.
+
+### Command construction
+
+`vllm-serve` builds the final argv as:
+
+```bash
+vllm serve <_VLLM_RESOLVED_MODEL> \
+  --config <config_file> \
+  --tensor-parallel-size <VLLM_TENSOR_PARALLEL_SIZE> \
+  --pipeline-parallel-size <VLLM_PIPELINE_PARALLEL_SIZE> \
+  --kv-cache-dtype <VLLM_KV_CACHE_DTYPE> \
+  --max-model-len <VLLM_MAX_MODEL_LEN> \
+  --max-num-batched-tokens <VLLM_MAX_NUM_BATCHED_TOKENS> \
+  --served-model-name <VLLM_SERVED_MODEL_NAME> \
+  [--enable-prefix-caching]    # when VLLM_PREFIX_CACHING is true/1/yes
+  [extra args...]              # anything after -- on the vllm-serve command line
+```
+
+The env var to vLLM CLI flag mapping:
+
+| Env var | CLI flag |
+|---------|----------|
+| `_VLLM_RESOLVED_MODEL` | positional (model argument) |
+| `VLLM_CONFIG_FILE` or `$FLOX_ENV_PROJECT/config.yaml` | `--config` |
+| `VLLM_TENSOR_PARALLEL_SIZE` | `--tensor-parallel-size` |
+| `VLLM_PIPELINE_PARALLEL_SIZE` | `--pipeline-parallel-size` |
+| `VLLM_KV_CACHE_DTYPE` | `--kv-cache-dtype` |
+| `VLLM_MAX_MODEL_LEN` | `--max-model-len` |
+| `VLLM_MAX_NUM_BATCHED_TOKENS` | `--max-num-batched-tokens` |
+| `VLLM_SERVED_MODEL_NAME` | `--served-model-name` |
+| `VLLM_PREFIX_CACHING` | `--enable-prefix-caching` (when truthy) |
+
+### Config file resolution
+
+1. If `VLLM_CONFIG_FILE` is set, use that path.
+2. Otherwise, use `$FLOX_ENV_PROJECT/config.yaml`.
+3. The file must exist and be readable, or `vllm-serve` exits with an error.
+
+## Multi-GPU
+
+```bash
+# 2-way tensor parallel (most common)
+VLLM_TENSOR_PARALLEL_SIZE=2 flox activate --start-services
+
+# 4-way pipeline parallel
+VLLM_PIPELINE_PARALLEL_SIZE=4 flox activate --start-services
+
+# 4-way hybrid: TP=2 x PP=2
+VLLM_TENSOR_PARALLEL_SIZE=2 \
+VLLM_PIPELINE_PARALLEL_SIZE=2 \
+  flox activate --start-services
+```
+
+**TP** (tensor parallelism) shards weight matrices across GPUs — reduces per-GPU memory, best for latency. **PP** (pipeline parallelism) distributes layers sequentially across GPUs — useful when TP alone isn't enough. **TP x PP must equal your total GPU count.**
+
+## Swapping models
+
+```bash
+# Override at activation time
+VLLM_MODEL=Qwen2.5-7B-Instruct \
+VLLM_MODEL_ORG=Qwen \
+  flox activate --start-services
+
+# Or edit the on-activate defaults in manifest.toml and restart
 flox services restart vllm
-
-# Stop
-flox services stop
 ```
 
-## Composable Architecture
+## Service management
 
-This environment is one layer of a three-environment reference stack. Each environment is self-contained and independently useful, but they compose via Flox `[include]` for production deployments.
-
-```
-┌─────────────────────────────────────────────────┐
-│  vllm-proxy/          (Layer 3: Network Edge)   │
-│  nginx reverse proxy, TLS, rate limiting        │
-│  Listens: 0.0.0.0:443 (HTTPS), :80 (redirect)  │
-│  Proxies to: 127.0.0.1:8000 (vllm)             │
-│  includes: vllm-monitoring/                     │
-├─────────────────────────────────────────────────┤
-│  vllm-monitoring/     (Layer 2: Observability)  │
-│  Prometheus + Grafana                           │
-│  Prometheus: 127.0.0.1:9090                     │
-│  Grafana:    127.0.0.1:3000                     │
-│  Scrapes:    127.0.0.1:8000/metrics             │
-│  includes: vllm-runtime/                        │
-├─────────────────────────────────────────────────┤
-│  vllm-runtime/        (Layer 1: Inference)      │
-│  vLLM server, CUDA, model management            │
-│  Listens: 127.0.0.1:8000                        │
-└─────────────────────────────────────────────────┘
+```bash
+flox services status              # check service state
+flox services logs vllm           # tail service logs
+flox services logs vllm -f        # follow logs
+flox services restart vllm        # restart the vLLM service
+flox services stop                # stop all services
+flox activate --start-services    # activate and start in one step
 ```
 
-Composition uses Flox `[include]` — each layer inherits the services and environment of the layer below:
+## Monitoring
+
+Install `flox/vllm-flox-monitoring` alongside this environment to add Prometheus + Grafana:
 
 ```toml
-# In vllm-monitoring/manifest.toml
-[include]
-environments = [{ dir = "../vllm-runtime" }]
-
-# In vllm-proxy/manifest.toml
-[include]
-environments = [{ dir = "../vllm-monitoring" }]
-```
-
-Activating `vllm-proxy/` starts all three layers. Activating `vllm-monitoring/` starts inference + monitoring without the proxy. Activating `vllm-runtime/` alone runs just the inference server.
-
-### Deployment Modes
-
-| Mode | Activate | Use Case |
-|------|----------|----------|
-| **Local dev** | `vllm-runtime/` | Direct localhost access, no overhead |
-| **Monitored** | `vllm-monitoring/` | Local dev with Prometheus/Grafana dashboards |
-| **Production** | `vllm-proxy/` | Full stack: TLS, auth, rate limiting, monitoring |
-
----
-
-### Environment: `vllm-monitoring/`
-
-Prometheus scrapes vLLM's `/metrics` endpoint. Grafana visualizes the metrics with a pre-configured vLLM dashboard.
-
-**Packages:**
-- `prometheus` — metrics collection and storage
-- `grafana` — dashboard UI
-
-**Services:**
-
-| Service | Bind Address | Purpose |
-|---------|-------------|---------|
-| `prometheus` | `127.0.0.1:9090` | Scrapes vLLM `/metrics` every 15s |
-| `grafana` | `127.0.0.1:3000` | Dashboard UI, datasource auto-configured |
-
-**Key files:**
-
-| File | Purpose |
-|------|---------|
-| `prometheus.yml` | Scrape config targeting `127.0.0.1:8000/metrics` |
-| `grafana/provisioning/datasources/prometheus.yaml` | Auto-registers Prometheus as a Grafana datasource |
-| `grafana/provisioning/dashboards/dashboard.yaml` | Dashboard provisioning config |
-| `grafana/dashboards/vllm.json` | Pre-built vLLM dashboard (request rate, latency p50/p95/p99, GPU memory, KV cache usage, batch size, token throughput) |
-
-**Prometheus scrape config (`prometheus.yml`):**
-
-```yaml
-global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
-
-scrape_configs:
-  - job_name: "vllm"
-    metrics_path: "/metrics"
-    static_configs:
-      - targets: ["127.0.0.1:8000"]
-```
-
-**vLLM metrics available for dashboards:**
-
-| Metric | Type | Description |
-|--------|------|-------------|
-| `vllm:num_requests_running` | Gauge | Currently processing requests |
-| `vllm:num_requests_waiting` | Gauge | Requests queued |
-| `vllm:gpu_cache_usage_perc` | Gauge | KV cache utilization (0.0–1.0) |
-| `vllm:avg_generation_throughput_toks_per_s` | Gauge | Token generation throughput |
-| `vllm:e2e_request_latency_seconds` | Histogram | End-to-end request latency |
-| `vllm:time_to_first_token_seconds` | Histogram | Time to first token (TTFT) |
-| `vllm:time_per_output_token_seconds` | Histogram | Inter-token latency (ITL) |
-| `vllm:num_preemptions_total` | Counter | Preempted requests (memory pressure) |
-
-**Manifest structure (`vllm-monitoring/.flox/env/manifest.toml`):**
-
-Note: Flox `[vars]` are literal strings — they can't reference other variables like `$FLOX_ENV_PROJECT`. Grafana reads `GF_*` environment variables at runtime, so paths that need to be portable are set in the `[hook]` section using shell expansion instead.
-
-```toml
-version = 1
-
-[install]
+# Add to [install]
 prometheus.pkg-path = "prometheus"
 grafana.pkg-path = "grafana"
+vllm-flox-monitoring.pkg-path = "flox/vllm-flox-monitoring"
 
-[vars]
-PROMETHEUS_HOST = "127.0.0.1"
-PROMETHEUS_PORT = "9090"
-GRAFANA_HOST = "127.0.0.1"
-GRAFANA_PORT = "3000"
-GF_SECURITY_ADMIN_PASSWORD = "admin"
-GF_SERVER_HTTP_ADDR = "127.0.0.1"
-GF_SERVER_HTTP_PORT = "3000"
+# Add to end of on-activate
+#   . vllm-monitoring-init
 
-[hook]
-on-activate = '''
-  mkdir -p "$FLOX_ENV_PROJECT/grafana/data"
-  mkdir -p "$FLOX_ENV_PROJECT/grafana/provisioning/datasources"
-  mkdir -p "$FLOX_ENV_PROJECT/grafana/provisioning/dashboards"
-  mkdir -p "$FLOX_ENV_PROJECT/grafana/dashboards"
-  mkdir -p "$FLOX_ENV_PROJECT/prometheus/data"
-
-  # Set Grafana paths via shell expansion (can't use $FLOX_ENV_PROJECT in [vars])
-  export GF_PATHS_PROVISIONING="$FLOX_ENV_PROJECT/grafana/provisioning"
-  export GF_PATHS_DATA="$FLOX_ENV_PROJECT/grafana/data"
-'''
-
-[services]
-prometheus.command = "prometheus --config.file=$FLOX_ENV_PROJECT/prometheus.yml --storage.tsdb.path=$FLOX_ENV_PROJECT/prometheus/data --web.listen-address=$PROMETHEUS_HOST:$PROMETHEUS_PORT"
-grafana.command = "grafana server --homepath=$(dirname $(dirname $(which grafana)))/share/grafana --config=$FLOX_ENV_PROJECT/grafana/grafana.ini"
-
-[include]
-environments = [{ dir = "../vllm-runtime" }]
+# Add to [services]
+# prometheus.command = "vllm-monitoring-prometheus"
+# grafana.command = "vllm-monitoring-grafana"
 ```
 
----
+Key override env vars: `PROMETHEUS_PORT` (default `9090`), `GF_SERVER_HTTP_PORT` (default `3000`).
 
-### Environment: `vllm-proxy/`
-
-nginx reverse proxy that sits in front of the vLLM server. Handles TLS termination, bearer token authentication, rate limiting, and request logging. This is the only layer that binds to external network interfaces.
-
-**Why a reverse proxy in front of vLLM:**
-
-- **TLS termination** — vLLM's uvicorn server doesn't handle TLS natively. Any client expecting `https://` (including the OpenAI Python SDK with a custom base URL) needs a TLS-terminating proxy.
-- **Rate limiting** — protects the GPU from being overwhelmed. A single long-context request can monopolize the GPU for seconds; rate limiting prevents queue starvation.
-- **IP allowlisting** — restrict access to known clients or CIDR ranges without modifying vLLM.
-- **Request/response logging** — structured access logs separate from vLLM's application logs, useful for auditing and billing.
-- **Health check abstraction** — nginx can return 503 during model loads or restarts, giving clients a clear signal rather than connection refused.
-- **Future: load balancing** — if the deployment scales to multiple GPUs or machines, nginx distributes requests across vLLM instances without changing client configuration.
-
-For local-only use (localhost clients, no network exposure), this layer is optional — `vllm-runtime/` alone is sufficient.
-
-**Packages:**
-- `nginx` — reverse proxy and TLS termination
-
-**Services:**
-
-| Service | Bind Address | Purpose |
-|---------|-------------|---------|
-| `nginx` | `0.0.0.0:443` (HTTPS), `0.0.0.0:80` (HTTP redirect) | TLS termination, auth, rate limiting |
-
-**Key files:**
-
-| File | Purpose |
-|------|---------|
-| `nginx.conf` | Main nginx configuration |
-| `certs/server.crt` | TLS certificate (self-signed for dev, replace for production) |
-| `certs/server.key` | TLS private key |
-
-**nginx configuration (`nginx.conf`):**
-
-```nginx
-worker_processes auto;
-error_log /home/daedalus/dev/vllm-proxy/logs/error.log warn;
-pid /home/daedalus/dev/vllm-proxy/logs/nginx.pid;
-
-events {
-    worker_connections 256;
-}
-
-http {
-    log_format json_combined escape=json '{'
-        '"time":"$time_iso8601",'
-        '"remote_addr":"$remote_addr",'
-        '"request":"$request",'
-        '"status":$status,'
-        '"body_bytes_sent":$body_bytes_sent,'
-        '"request_time":$request_time,'
-        '"upstream_response_time":"$upstream_response_time"'
-    '}';
-
-    access_log /home/daedalus/dev/vllm-proxy/logs/access.log json_combined;
-
-    # Rate limiting: 10 requests/sec per client IP, burst of 20
-    limit_req_zone $binary_remote_addr zone=vllm_limit:10m rate=10r/s;
-
-    # Upstream vLLM server
-    upstream vllm_backend {
-        server 127.0.0.1:8000;
-        keepalive 32;
-    }
-
-    # HTTP -> HTTPS redirect
-    server {
-        listen 80;
-        return 301 https://$host$request_uri;
-    }
-
-    # HTTPS server
-    server {
-        listen 443 ssl;
-
-        ssl_certificate     /home/daedalus/dev/vllm-proxy/certs/server.crt;
-        ssl_certificate_key /home/daedalus/dev/vllm-proxy/certs/server.key;
-        ssl_protocols       TLSv1.2 TLSv1.3;
-        ssl_ciphers         HIGH:!aNULL:!MD5;
-
-        # Health check endpoint (no auth, no rate limit)
-        location /health {
-            proxy_pass http://vllm_backend/health;
-            proxy_set_header Host $host;
-        }
-
-        # Prometheus metrics (restrict to localhost/monitoring)
-        location /metrics {
-            allow 127.0.0.1;
-            deny all;
-            proxy_pass http://vllm_backend/metrics;
-        }
-
-        # OpenAI-compatible API
-        location /v1/ {
-            limit_req zone=vllm_limit burst=20 nodelay;
-
-            proxy_pass http://vllm_backend/v1/;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-
-            # Streaming support
-            proxy_buffering off;
-            proxy_cache off;
-            proxy_http_version 1.1;
-            proxy_set_header Connection "";
-
-            # Long timeout for generation
-            proxy_read_timeout 300s;
-        }
-    }
-}
+```bash
+curl http://127.0.0.1:9090/api/v1/targets   # Prometheus targets
+curl http://127.0.0.1:3000/api/health        # Grafana health
 ```
 
-**Manifest structure (`vllm-proxy/.flox/env/manifest.toml`):**
+Raw vLLM metrics are always available at `http://127.0.0.1:8000/metrics` without additional packages.
 
-```toml
-version = 1
+## Troubleshooting
 
-[install]
-nginx.pkg-path = "nginx"
-openssl.pkg-path = "openssl"
+Common issues and their solutions. Exit codes refer to `vllm-preflight`.
 
-[vars]
-NGINX_HOST = "0.0.0.0"
-NGINX_HTTPS_PORT = "443"
-NGINX_HTTP_PORT = "80"
-VLLM_PROXY_RATE_LIMIT = "10r/s"
-VLLM_PROXY_RATE_BURST = "20"
+### Port conflict (exit code 2)
 
-[hook]
-on-activate = '''
-  mkdir -p "$FLOX_ENV_PROJECT/logs"
-  mkdir -p "$FLOX_ENV_PROJECT/certs"
+`vllm-preflight` automatically reclaims the port from stale vLLM processes. If it exits with code 2, a non-vLLM process is using the port.
 
-  # Generate self-signed cert if none exists
-  if [ ! -f "$FLOX_ENV_PROJECT/certs/server.crt" ]; then
-    echo "Generating self-signed TLS certificate..."
-    openssl req -x509 -newkey rsa:2048 -nodes \
-      -keyout "$FLOX_ENV_PROJECT/certs/server.key" \
-      -out "$FLOX_ENV_PROJECT/certs/server.crt" \
-      -days 365 -subj "/CN=localhost" 2>/dev/null
-    echo "  Self-signed cert created. Replace with a real cert for production."
-  fi
-'''
+```bash
+# Find what's on the port
+ss -tlnp | grep :8000
 
-[services]
-nginx.command = "nginx -c $FLOX_ENV_PROJECT/nginx.conf -g 'daemon off;'"
-
-[include]
-environments = [{ dir = "../vllm-monitoring" }]
+# Either stop that process or change the port
+VLLM_PORT=8001 flox activate --start-services
 ```
 
----
+### Different UID (exit code 3)
 
-## File Structure
+Another user's vLLM process holds the port. Either ask them to stop it, or:
 
-The complete three-environment layout:
+```bash
+VLLM_ALLOW_KILL_OTHER_UID=1 flox activate --start-services
+```
+
+### Inode not attributable (exit code 4)
+
+Your system restricts `/proc/<pid>/fd` visibility (hidepid mount option). Run as the owning user, relax hidepid, or free the port manually.
+
+### Stop failed (exit code 5)
+
+The port is still listening after SIGTERM + SIGKILL + timeout. Increase the timeout or investigate manually:
+
+```bash
+VLLM_PORT_FREE_TIMEOUT=30 VLLM_TERM_GRACE=10 flox activate --start-services
+```
+
+### GPU not detected
+
+Verify with `nvidia-smi`. This environment requires NVIDIA driver 575+. To skip the GPU check (e.g., for CPU-only testing):
+
+```bash
+VLLM_SKIP_GPU_CHECK=1 flox activate --start-services
+```
+
+### Gated model 401
+
+Gated models (Llama, Gemma, Mistral) require a HuggingFace token:
+
+```bash
+HF_TOKEN=hf_... flox activate --start-services
+```
+
+Ensure you've accepted the model's license on the HuggingFace website.
+
+### Out of memory (OOM)
+
+Reduce memory pressure:
+
+1. Lower `gpu-memory-utilization` in `config.yaml` (e.g., `0.85`).
+2. Reduce `VLLM_MAX_MODEL_LEN` (e.g., `2048`).
+3. Use `VLLM_KV_CACHE_DTYPE=fp8` to halve KV cache memory.
+4. Increase tensor parallelism to spread the model across GPUs.
+
+### Missing tokenizer
+
+Some models use non-standard tokenizer layouts. Skip the check:
+
+```bash
+VLLM_SKIP_TOKENIZER_CHECK=1 flox activate --start-services
+```
+
+### Stale lock
+
+If a previous run was killed mid-operation, the lock file may be stale:
+
+```bash
+# For vllm-preflight
+rm -f /tmp/vllm-preflight.lock
+
+# For vllm-resolve-model (lockfile is next to the env file)
+rm -f "$FLOX_ENV_CACHE"/vllm-model.*.lock
+```
+
+The mkdir-based fallback lock includes stale PID detection and self-cleans.
+
+### Env file not found
+
+`vllm-serve` cannot find the model env file. Run `vllm-resolve-model` first:
+
+```bash
+vllm-resolve-model && vllm-serve
+```
+
+Or specify the env file explicitly:
+
+```bash
+VLLM_MODEL_ENV_FILE=/path/to/env vllm-serve
+```
+
+### Inspecting the generated command
+
+```bash
+vllm-serve --print-cmd   # print the vllm serve argv to stderr, then run it
+vllm-serve --dry-run     # print the argv and exit without running
+```
+
+### Verbose logging
+
+```bash
+VLLM_LOGGING_LEVEL=DEBUG flox activate --start-services
+```
+
+## File structure
 
 ```
-vllm-runtime/                       # Layer 1: Inference
-  .flox/env/manifest.toml
-  config.yaml                       # vLLM server configuration
-  models/                           # HuggingFace model cache
-  README.md
-
-vllm-monitoring/                    # Layer 2: Observability
-  .flox/env/manifest.toml
-  prometheus.yml                    # Scrape config
-  prometheus/data/                  # Prometheus TSDB storage
-  grafana/
-    grafana.ini                     # Grafana server config
-    provisioning/
-      datasources/prometheus.yaml   # Auto-registers Prometheus
-      dashboards/dashboard.yaml     # Dashboard provisioning
-    dashboards/
-      vllm.json                     # Pre-built vLLM dashboard
-  README.md
-
-vllm-proxy/                         # Layer 3: Network Edge
-  .flox/env/manifest.toml
-  nginx.conf                        # Reverse proxy configuration
-  certs/
-    server.crt                      # TLS certificate
-    server.key                      # TLS private key
-  logs/                             # Access and error logs
-  README.md
+vllm-runtime/
+  .flox/env/manifest.toml   # Flox manifest (packages, on-activate hook, service)
+  config.yaml                # vLLM static server config (gpu-memory-utilization, dtype, etc.)
+  models/                    # Model cache (created on activation)
+  README.md                  # This file
 ```
+
+Scripts (`vllm-preflight`, `vllm-resolve-model`, `vllm-serve`) are provided by the `flox/vllm-flox-runtime` package and available on `PATH` after activation. They are not stored in this directory.
+
+## Security notes
+
+The runtime scripts handle untrusted input (model names, env files, lock files) and apply defense-in-depth.
+
+### Env file trust model
+
+The model env file is a trust boundary. In safe mode (default), `vllm-serve` parses the file with a restrictive Python parser that rejects shell interpolation and command substitution. In trusted mode, the file is `source`d directly — only enable this for env files you control.
+
+Even in safe mode, the env file can set arbitrary environment variables (e.g., `PATH`, `LD_LIBRARY_PATH`, `HF_HOME`), so protect its location.
+
+### File permissions
+
+- **Env files**: written with `umask 077` and `chmod 600` — readable only by the owning user.
+- **Lock files**: created with `umask 077`. Symlink safety is checked before opening.
+- **Staging directories**: created under `$VLLM_MODELS_DIR/.staging/` with `umask 077`.
+
+### Lockfile safety
+
+- `vllm-preflight` validates the lockfile is not a symlink and is a regular file before opening.
+- `vllm-resolve-model` uses per-model lock files (one per env file path) to prevent concurrent provisioning of the same model.
+- The `mkdir`-based fallback includes stale PID detection to recover from crashes.
