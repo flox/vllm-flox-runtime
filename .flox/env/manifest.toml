@@ -18,6 +18,9 @@ version = 1
 vllm-python312-cuda12_9-sm120.pkg-path = "flox/vllm-python312-cuda12_9-sm120"
 vllm-python312-cuda12_9-sm120.systems = ["x86_64-linux"]
 vllm-python312-cuda12_9-sm120.pkg-group = "vllm-python312-cuda12_9-sm120"
+vllm-flox-runtime.pkg-path = "flox/vllm-flox-runtime"
+vllm-flox-runtime.systems = ["x86_64-linux"]
+vllm-flox-runtime.pkg-group = "vllm-flox-runtime"
 # gum.pkg-path = "gum"
 # gum.version = "^0.14.5"
 
@@ -27,15 +30,9 @@ vllm-python312-cuda12_9-sm120.pkg-group = "vllm-python312-cuda12_9-sm120"
 ##      as well as [hook], [profile] scripts and [services] below.
 ## -------------------------------------------------------------------
 [vars]
-VLLM_MODEL = "meta-llama/Llama-3.1-8B-Instruct"
-VLLM_HOST = "127.0.0.1"
-VLLM_PORT = "8000"
-VLLM_API_KEY = "sk-vllm-local-dev"
-VLLM_TENSOR_PARALLEL_SIZE = "1"
-VLLM_PIPELINE_PARALLEL_SIZE = "1"
-HF_HOME = "/home/daedalus/dev/vllm-runtime/models"
-VLLM_LOGGING_LEVEL = "WARNING"
-PROMETHEUS_MULTIPROC_DIR = "/tmp/vllm-prometheus"
+# All user-tunable vars live in [hook.on-activate] with ${VAR:-default}
+# fallbacks so they can be overridden via environment variables at
+# activation time (e.g., VLLM_MODEL=MyModel flox activate).
 
 
 ## Activation Hook ---------------------------------------------------
@@ -43,17 +40,32 @@ PROMETHEUS_MULTIPROC_DIR = "/tmp/vllm-prometheus"
 ## -------------------------------------------------------------------
 [hook]
 on-activate = '''
-  # Create HuggingFace model cache directory
-  mkdir -p "$FLOX_ENV_PROJECT/models"
+  # Model
+  export VLLM_MODEL="${VLLM_MODEL:-Llama-3.1-8B-Instruct}"
+  export VLLM_MODEL_ORG="${VLLM_MODEL_ORG:-meta-llama}"
+  export VLLM_MODEL_SOURCES="${VLLM_MODEL_SOURCES:-local,hf-cache,hf-hub}"
+  export VLLM_MODELS_DIR="${VLLM_MODELS_DIR:-$FLOX_ENV_PROJECT/models}"
+  export VLLM_SERVED_MODEL_NAME="${VLLM_SERVED_MODEL_NAME:-$VLLM_MODEL}"
 
-  # Create Prometheus multiprocess directory
+  # Server
+  export VLLM_HOST="${VLLM_HOST:-127.0.0.1}"
+  export VLLM_PORT="${VLLM_PORT:-8000}"
+  export VLLM_API_KEY="${VLLM_API_KEY:-sk-vllm-local-dev}"
+
+  # Engine tuning
+  export VLLM_TENSOR_PARALLEL_SIZE="${VLLM_TENSOR_PARALLEL_SIZE:-1}"
+  export VLLM_PIPELINE_PARALLEL_SIZE="${VLLM_PIPELINE_PARALLEL_SIZE:-1}"
+  export VLLM_PREFIX_CACHING="${VLLM_PREFIX_CACHING:-false}"
+  export VLLM_KV_CACHE_DTYPE="${VLLM_KV_CACHE_DTYPE:-auto}"
+  export VLLM_MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-4096}"
+  export VLLM_MAX_NUM_BATCHED_TOKENS="${VLLM_MAX_NUM_BATCHED_TOKENS:-4096}"
+
+  # Logging / metrics
+  export VLLM_LOGGING_LEVEL="${VLLM_LOGGING_LEVEL:-WARNING}"
+  export PROMETHEUS_MULTIPROC_DIR="${PROMETHEUS_MULTIPROC_DIR:-/tmp/vllm-prometheus}"
+
+  mkdir -p "$VLLM_MODELS_DIR"
   mkdir -p "$PROMETHEUS_MULTIPROC_DIR"
-
-  # Validate config.yaml exists
-  if [ ! -f "$FLOX_ENV_PROJECT/config.yaml" ]; then
-    echo "WARNING: $FLOX_ENV_PROJECT/config.yaml not found"
-    echo "  The vllm service will not start without it."
-  fi
 '''
 
 
@@ -79,7 +91,7 @@ on-activate = '''
 ##  $ flox activate --start-services  <- Activates & starts all
 ## ------------------------------------------------------------------
 [services]
-vllm.command = "vllm serve $VLLM_MODEL --config $FLOX_ENV_PROJECT/config.yaml --tensor-parallel-size $VLLM_TENSOR_PARALLEL_SIZE --pipeline-parallel-size $VLLM_PIPELINE_PARALLEL_SIZE"
+vllm.command = "vllm-preflight && vllm-resolve-model && vllm-serve"
 
 
 ## Include ----------------------------------------------------------
