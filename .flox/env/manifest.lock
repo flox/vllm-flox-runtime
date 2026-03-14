@@ -3,9 +3,17 @@
   "manifest": {
     "version": 1,
     "install": {
+      "phi-4-mini-instruct-fp8-hf": {
+        "pkg-path": "flox/phi-4-mini-instruct-fp8-hf",
+        "pkg-group": "phi-4-mini-instruct-fp8-hf",
+        "systems": [
+          "x86_64-linux"
+        ]
+      },
       "vllm": {
         "pkg-path": "flox-cuda/python3Packages.vllm",
         "pkg-group": "vllm",
+        "version": "0.15.1",
         "systems": [
           "x86_64-linux"
         ]
@@ -19,7 +27,7 @@
       }
     },
     "hook": {
-      "on-activate": "  # Model\n  export VLLM_MODEL=\"${VLLM_MODEL:-Llama-3.1-8B-Instruct}\"\n  export VLLM_MODEL_ORG=\"${VLLM_MODEL_ORG:-meta-llama}\"\n  export VLLM_MODEL_SOURCES=\"${VLLM_MODEL_SOURCES:-local,hf-cache,hf-hub}\"\n  export VLLM_MODELS_DIR=\"${VLLM_MODELS_DIR:-$FLOX_ENV_PROJECT/models}\"\n  export VLLM_SERVED_MODEL_NAME=\"${VLLM_SERVED_MODEL_NAME:-$VLLM_MODEL}\"\n\n  # Server\n  export VLLM_HOST=\"${VLLM_HOST:-0.0.0.0}\"\n  export VLLM_PORT=\"${VLLM_PORT:-8000}\"\n  export VLLM_API_KEY=\"${VLLM_API_KEY:-sk-vllm-local-dev}\"\n\n  # Engine tuning\n  export VLLM_TENSOR_PARALLEL_SIZE=\"${VLLM_TENSOR_PARALLEL_SIZE:-1}\"\n  export VLLM_PIPELINE_PARALLEL_SIZE=\"${VLLM_PIPELINE_PARALLEL_SIZE:-1}\"\n  export VLLM_PREFIX_CACHING=\"${VLLM_PREFIX_CACHING:-false}\"\n  export VLLM_KV_CACHE_DTYPE=\"${VLLM_KV_CACHE_DTYPE:-auto}\"\n  export VLLM_MAX_MODEL_LEN=\"${VLLM_MAX_MODEL_LEN:-4096}\"\n  export VLLM_MAX_NUM_BATCHED_TOKENS=\"${VLLM_MAX_NUM_BATCHED_TOKENS:-4096}\"\n\n  # Logging / metrics\n  export VLLM_LOGGING_LEVEL=\"${VLLM_LOGGING_LEVEL:-WARNING}\"\n  export PROMETHEUS_MULTIPROC_DIR=\"${PROMETHEUS_MULTIPROC_DIR:-/tmp/vllm-prometheus}\"\n\n  mkdir -p \"$VLLM_MODELS_DIR\"\n  mkdir -p \"$PROMETHEUS_MULTIPROC_DIR\"\n"
+      "on-activate": "  # Model\n  export VLLM_MODEL=\"${VLLM_MODEL:-Phi-4-mini-instruct-FP8-TORCHAO}\"\n  export VLLM_MODEL_ORG=\"${VLLM_MODEL_ORG:-microsoft}\"\n  export VLLM_MODEL_SOURCES=\"${VLLM_MODEL_SOURCES:-flox,local,hf-cache,hf-hub}\"\n  export VLLM_MODELS_DIR=\"${VLLM_MODELS_DIR:-$FLOX_ENV_PROJECT/models}\"\n  export VLLM_SERVED_MODEL_NAME=\"${VLLM_SERVED_MODEL_NAME:-$VLLM_MODEL}\"\n\n  # Server\n  export VLLM_HOST=\"${VLLM_HOST:-0.0.0.0}\"\n  export VLLM_PORT=\"${VLLM_PORT:-8000}\"\n  export VLLM_API_KEY=\"${VLLM_API_KEY:-sk-vllm-local-dev}\"\n\n  # Engine tuning\n  export VLLM_TENSOR_PARALLEL_SIZE=\"${VLLM_TENSOR_PARALLEL_SIZE:-1}\"\n  export VLLM_PIPELINE_PARALLEL_SIZE=\"${VLLM_PIPELINE_PARALLEL_SIZE:-1}\"\n  export VLLM_PREFIX_CACHING=\"${VLLM_PREFIX_CACHING:-false}\"\n  export VLLM_KV_CACHE_DTYPE=\"${VLLM_KV_CACHE_DTYPE:-auto}\"\n  export VLLM_MAX_MODEL_LEN=\"${VLLM_MAX_MODEL_LEN:-4096}\"\n  export VLLM_MAX_NUM_BATCHED_TOKENS=\"${VLLM_MAX_NUM_BATCHED_TOKENS:-4096}\"\n\n  # Logging / metrics\n  export VLLM_LOGGING_LEVEL=\"${VLLM_LOGGING_LEVEL:-WARNING}\"\n  export PROMETHEUS_MULTIPROC_DIR=\"${PROMETHEUS_MULTIPROC_DIR:-/tmp/vllm-prometheus}\"\n\n  mkdir -p \"$VLLM_MODELS_DIR\"\n  mkdir -p \"$PROMETHEUS_MULTIPROC_DIR\"\n"
     },
     "profile": {},
     "options": {},
@@ -30,6 +38,65 @@
     }
   },
   "packages": [
+    {
+      "attr_path": "phi-4-mini-instruct-fp8-hf",
+      "broken": false,
+      "derivation": "/nix/store/48q0gcamlaz14mcxdydd4ddnx3pv7j1a-phi-4-mini-instruct-fp8-hf-1.0.1.drv",
+      "install_id": "phi-4-mini-instruct-fp8-hf",
+      "locked_url": "git@github.com:barstoolbluz/build-hf-models.git?rev=ca88e1655077dab1a0e8bc3583d98bb2575be501",
+      "name": "phi-4-mini-instruct-fp8-hf-1.0.1",
+      "pname": "phi-4-mini-instruct-fp8-hf",
+      "rev": "ca88e1655077dab1a0e8bc3583d98bb2575be501",
+      "rev_count": 6,
+      "rev_date": "2026-03-13T23:07:14Z",
+      "scrape_date": "2026-03-14T16:05:11.827558844Z",
+      "stabilities": [
+        "unstable",
+        "staging",
+        "stable"
+      ],
+      "unfree": false,
+      "version": "1.0.1",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/kcmaxiax4kd6zbzb3w6y8i5qsb8bhipw-phi-4-mini-instruct-fp8-hf-1.0.1"
+      },
+      "system": "x86_64-linux",
+      "group": "phi-4-mini-instruct-fp8-hf",
+      "priority": 5
+    },
+    {
+      "attr_path": "vllm-flox-runtime",
+      "broken": false,
+      "derivation": "/nix/store/9dmvwsq06c71psdnzi67c7vks0pxpf6h-vllm-flox-runtime-0.9.4.drv",
+      "description": "Runtime scripts for vLLM model serving with Flox",
+      "install_id": "vllm-flox-runtime",
+      "locked_url": "git@github.com:barstoolbluz/build-vllm-flox-runtime.git?rev=77ee4eb372f251ebaa54fda11c0a33ffc7457a52",
+      "name": "vllm-flox-runtime-0.9.4",
+      "pname": "vllm-flox-runtime",
+      "rev": "77ee4eb372f251ebaa54fda11c0a33ffc7457a52",
+      "rev_count": 11,
+      "rev_date": "2026-03-13T15:18:40Z",
+      "scrape_date": "2026-03-14T16:05:11.827565644Z",
+      "stabilities": [
+        "unstable",
+        "staging",
+        "stable"
+      ],
+      "unfree": false,
+      "version": "0.9.4",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/bzg8jn055dpvvk99l2s0bxa53fqk2yj3-vllm-flox-runtime-0.9.4"
+      },
+      "system": "x86_64-linux",
+      "group": "vllm-flox-runtime",
+      "priority": 5
+    },
     {
       "attr_path": "python3Packages.vllm",
       "broken": false,
@@ -43,7 +110,7 @@
       "rev": "9dcb002ca1690658be4a04645215baea8b95f31d",
       "rev_count": 960399,
       "rev_date": "2026-03-08T09:52:19Z",
-      "scrape_date": "2026-03-11T21:51:45.800083401Z",
+      "scrape_date": "2026-03-14T16:05:48.487953307Z",
       "stabilities": [
         "unstable"
       ],
@@ -58,36 +125,6 @@
       },
       "system": "x86_64-linux",
       "group": "vllm",
-      "priority": 5
-    },
-    {
-      "attr_path": "vllm-flox-runtime",
-      "broken": false,
-      "derivation": "/nix/store/z0ry7dv6ljpd77i907xxhinipp4zs6gl-vllm-flox-runtime-0.9.3.drv",
-      "description": "Runtime scripts for vLLM model serving with Flox",
-      "install_id": "vllm-flox-runtime",
-      "locked_url": "git@github.com:barstoolbluz/build-vllm-flox-runtime.git?rev=443aaea7ea79f48f354dc7caaf322473e58da4ce",
-      "name": "vllm-flox-runtime-0.9.3",
-      "pname": "vllm-flox-runtime",
-      "rev": "443aaea7ea79f48f354dc7caaf322473e58da4ce",
-      "rev_count": 10,
-      "rev_date": "2026-03-11T21:51:15Z",
-      "scrape_date": "2026-03-11T21:51:45.800193446Z",
-      "stabilities": [
-        "unstable",
-        "staging",
-        "stable"
-      ],
-      "unfree": false,
-      "version": "0.9.3",
-      "outputs_to_install": [
-        "out"
-      ],
-      "outputs": {
-        "out": "/nix/store/wrji20j5nak8skki20nb1k81ib688hcp-vllm-flox-runtime-0.9.3"
-      },
-      "system": "x86_64-linux",
-      "group": "vllm-flox-runtime",
       "priority": 5
     }
   ]

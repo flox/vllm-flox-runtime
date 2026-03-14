@@ -23,7 +23,11 @@ vllm-flox-runtime.systems = ["x86_64-linux"]
 vllm-flox-runtime.pkg-group = "vllm-flox-runtime"
 vllm.pkg-path = "flox-cuda/python3Packages.vllm"
 vllm.systems = ["x86_64-linux"]
+vllm.version = "0.15.1"
 vllm.pkg-group = "vllm"
+phi-4-mini-instruct-fp8-hf.pkg-path = "flox/phi-4-mini-instruct-fp8-hf"
+phi-4-mini-instruct-fp8-hf.systems = ["x86_64-linux"]
+phi-4-mini-instruct-fp8-hf.pkg-group = "phi-4-mini-instruct-fp8-hf"
 # gum.pkg-path = "gum"
 # gum.version = "^0.14.5"
 
@@ -44,9 +48,9 @@ vllm.pkg-group = "vllm"
 [hook]
 on-activate = '''
   # Model
-  export VLLM_MODEL="${VLLM_MODEL:-Llama-3.1-8B-Instruct}"
-  export VLLM_MODEL_ORG="${VLLM_MODEL_ORG:-meta-llama}"
-  export VLLM_MODEL_SOURCES="${VLLM_MODEL_SOURCES:-local,hf-cache,hf-hub}"
+  export VLLM_MODEL="${VLLM_MODEL:-Phi-4-mini-instruct-FP8-TORCHAO}"
+  export VLLM_MODEL_ORG="${VLLM_MODEL_ORG:-microsoft}"
+  export VLLM_MODEL_SOURCES="${VLLM_MODEL_SOURCES:-flox,local,hf-cache,hf-hub}"
   export VLLM_MODELS_DIR="${VLLM_MODELS_DIR:-$FLOX_ENV_PROJECT/models}"
   export VLLM_SERVED_MODEL_NAME="${VLLM_SERVED_MODEL_NAME:-$VLLM_MODEL}"
 
