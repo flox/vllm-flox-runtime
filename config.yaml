@@ -16,6 +16,8 @@ port: 8000
 
 dtype: auto
 gpu-memory-utilization: 0.92
+compilation-config:
+  level: 0
 
 disable-log-requests: true
 uvicorn-log-level: "warning"
