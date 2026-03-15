@@ -1,11 +1,3 @@
-## Flox Environment Manifest -----------------------------------------
-##
-##   _Everything_ you need to know about the _manifest_ is here:
-##
-##   https://flox.dev/docs/reference/command-reference/manifest.toml/
-##
-## -------------------------------------------------------------------
-# Flox manifest version managed by Flox CLI
 schema-version = "1.10.0"
 
 
@@ -15,9 +7,6 @@ schema-version = "1.10.0"
 ##  $ flox show gum     <- show all versions of a package
 ## -------------------------------------------------------------------
 [install]
-#vllm-python312-cuda12_9-sm120.pkg-path = "flox/vllm-python312-cuda12_9-sm120"
-#vllm-python312-cuda12_9-sm120.systems = ["x86_64-linux"]
-#vllm-python312-cuda12_9-sm120.pkg-group = "vllm-python312-cuda12_9-sm120"
 vllm-flox-runtime.pkg-path = "flox/vllm-flox-runtime"
 vllm-flox-runtime.systems = ["x86_64-linux"]
 vllm-flox-runtime.pkg-group = "vllm-flox-runtime"
