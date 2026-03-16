@@ -1,11 +1,5 @@
-schema-version = "1.10.0"
+version = 1
 
-
-## Install Packages --------------------------------------------------
-##  $ flox install gum  <- puts a package in [install] section below
-##  $ flox search gum   <- search for a package
-##  $ flox show gum     <- show all versions of a package
-## -------------------------------------------------------------------
 [install]
 vllm-flox-runtime.pkg-path = "flox/vllm-flox-runtime"
 vllm-flox-runtime.systems = ["x86_64-linux"]
@@ -14,24 +8,8 @@ vllm.pkg-path = "flox-cuda/python3Packages.vllm"
 vllm.systems = ["x86_64-linux"]
 vllm.version = "0.15.1"
 vllm.pkg-group = "vllm"
-vllm.outputs = "all"
-# gum.pkg-path = "gum"
-# gum.version = "^0.14.5"
 
 
-## Environment Variables ---------------------------------------------
-##  ... available for use in the activated environment
-##      as well as [hook], [profile] scripts and [services] below.
-## -------------------------------------------------------------------
-[vars]
-# All user-tunable vars live in [hook.on-activate] with ${VAR:-default}
-# fallbacks so they can be overridden via environment variables at
-# activation time (e.g., VLLM_MODEL=MyModel flox activate).
-
-
-## Activation Hook ---------------------------------------------------
-##  ... run by _bash_ shell when you run 'flox activate'.
-## -------------------------------------------------------------------
 [hook]
 on-activate = '''
   # Model
@@ -169,56 +147,10 @@ PROVENANCE
 '''
 
 
-## Profile script ----------------------------------------------------
-## ... sourced by _your shell_ when you run 'flox activate'.
-## -------------------------------------------------------------------
-[profile]
-# common = '''
-#   gum style \
-#   --foreground 212 --border-foreground 212 --border double \
-#   --align center --width 50 --margin "1 2" --padding "2 4" \
-#     $INTRO_MESSAGE
-# '''
-## Shell-specific customizations such as setting aliases go here:
-# bash = ...
-# zsh  = ...
-# fish = ...
-
-
-## Services ---------------------------------------------------------
-##  $ flox services start             <- Starts all services
-##  $ flox services status            <- Status of running services
-##  $ flox activate --start-services  <- Activates & starts all
-## ------------------------------------------------------------------
 [services]
 vllm.command = "vllm-preflight && vllm-resolve-model && vllm-serve"
 
 
-## Include ----------------------------------------------------------
-## ... environments to create a composed environment
-## ------------------------------------------------------------------
-[include]
-# environments = [
-#     { dir = "../common" }
-# ]
-
-
-## Build and publish your own packages ------------------------------
-##  $ flox build
-##  $ flox publish
-## ------------------------------------------------------------------
-[build]
-# [build.myproject]
-# description = "The coolest project ever"
-# version = "0.0.1"
-# command = """
-#   mkdir -p $out/bin
-#   cargo build --release
-#   cp target/release/myproject $out/bin/myproject
-# """
-
-
-## Other Environment Options -----------------------------------------
 [options]
 # Systems that environment is compatible with
 # systems = [

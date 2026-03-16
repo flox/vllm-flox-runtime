@@ -1,7 +1,7 @@
 {
   "lockfile-version": 1,
   "manifest": {
-    "schema-version": "1.10.0",
+    "version": 1,
     "install": {
       "vllm": {
         "pkg-path": "flox-cuda/python3Packages.vllm",
@@ -9,8 +9,7 @@
         "version": "0.15.1",
         "systems": [
           "x86_64-linux"
-        ],
-        "outputs": "all"
+        ]
       },
       "vllm-flox-runtime": {
         "pkg-path": "flox/vllm-flox-runtime",
@@ -23,7 +22,6 @@
     "hook": {
       "on-activate": "  # Model\n  export VLLM_MODEL=\"${VLLM_MODEL:-Phi-4-mini-instruct}\"\n  export VLLM_MODEL_ORG=\"${VLLM_MODEL_ORG:-microsoft}\"\n  export VLLM_MODEL_SOURCES=\"${VLLM_MODEL_SOURCES:-local,hf-cache,hf-hub}\"\n  export VLLM_MODELS_DIR=\"${VLLM_MODELS_DIR:-$FLOX_ENV_PROJECT/models}\"\n  export VLLM_SERVED_MODEL_NAME=\"${VLLM_SERVED_MODEL_NAME:-$VLLM_MODEL}\"\n\n  # Server\n  export VLLM_HOST=\"${VLLM_HOST:-0.0.0.0}\"\n  export VLLM_PORT=\"${VLLM_PORT:-8000}\"\n  export VLLM_API_KEY=\"${VLLM_API_KEY:-sk-vllm-local-dev}\"\n\n  # Engine tuning\n  export VLLM_TENSOR_PARALLEL_SIZE=\"${VLLM_TENSOR_PARALLEL_SIZE:-1}\"\n  export VLLM_PIPELINE_PARALLEL_SIZE=\"${VLLM_PIPELINE_PARALLEL_SIZE:-1}\"\n  export VLLM_PREFIX_CACHING=\"${VLLM_PREFIX_CACHING:-false}\"\n  export VLLM_KV_CACHE_DTYPE=\"${VLLM_KV_CACHE_DTYPE:-auto}\"\n  export VLLM_MAX_MODEL_LEN=\"${VLLM_MAX_MODEL_LEN:-4096}\"\n  export VLLM_MAX_NUM_BATCHED_TOKENS=\"${VLLM_MAX_NUM_BATCHED_TOKENS:-4096}\"\n\n  # Logging / metrics\n  export VLLM_LOGGING_LEVEL=\"${VLLM_LOGGING_LEVEL:-WARNING}\"\n  export PROMETHEUS_MULTIPROC_DIR=\"${PROMETHEUS_MULTIPROC_DIR:-/tmp/vllm-prometheus}\"\n\n  mkdir -p \"$VLLM_MODELS_DIR\"\n  mkdir -p \"$PROMETHEUS_MULTIPROC_DIR\"\n\n  # ── Ensure vllm config has compilation disabled (nvcc not on PATH) ──\n  _vllm_config=\"$FLOX_ENV_CACHE/vllm-config.yaml\"\n  if [[ ! -f \"$_vllm_config\" ]]; then\n    cat > \"$_vllm_config\" <<'VLLM_YAML'\nhost: \"0.0.0.0\"\nport: 8000\n\ndtype: auto\ngpu-memory-utilization: 0.92\ncompilation-config: '{\"level\": 0}'\n\ndisable-log-requests: true\nuvicorn-log-level: \"warning\"\nVLLM_YAML\n  elif ! grep -q 'compilation-config' \"$_vllm_config\"; then\n    printf '\\ncompilation-config: '\\''{\"level\": 0}'\\''\\n' >> \"$_vllm_config\"\n  fi\n\n  # ── Download default model from GitHub Releases (first activation) ──\n  _gh_release_model_download() {\n    local _default_model=\"Phi-4-mini-instruct\"\n    # Only run for the default model; user overrides skip this entirely\n    if [[ \"$VLLM_MODEL\" != \"$_default_model\" ]]; then\n      return 0\n    fi\n\n    local _identity_hash=\"9806f0c862fd\"\n    local _model_dir=\"$VLLM_MODELS_DIR/${_default_model}.${_identity_hash}\"\n\n    # Idempotent: skip if already downloaded\n    if [[ -f \"$_model_dir/config.json\" ]]; then\n      return 0\n    fi\n\n    echo \"══════════════════════════════════════════════════════════════\"\n    echo \"  Downloading ${_default_model} model weights …\"\n    echo \"  (one-time download, ~7.2 GB from GitHub Releases)\"\n    echo \"══════════════════════════════════════════════════════════════\"\n\n    local _gh_tag=\"phi-4-mini-instruct-v1.0\"\n    local _gh_repo=\"barstoolbluz/build-hf-models\"\n    local _base_url=\"https://github.com/${_gh_repo}/releases/download/${_gh_tag}\"\n    local _parts=( \"phi-4-mini-instruct.tar.part-aa\"\n                   \"phi-4-mini-instruct.tar.part-ab\"\n                   \"phi-4-mini-instruct.tar.part-ac\"\n                   \"phi-4-mini-instruct.tar.part-ad\" )\n    local _checksums_file=\"phi-4-mini-instruct.sha256sums\"\n    local _tmp_dir\n    _tmp_dir=\"$(mktemp -d \"${VLLM_MODELS_DIR}/.dl-${_default_model}.XXXXXX\")\"\n\n    # Clean up on any failure\n    trap 'rm -rf \"$_tmp_dir\" \"${_staging_dir:-}\"; echo \"ERROR: model download failed — cleaned up temp files.\" >&2' ERR\n\n    # Download checksums\n    echo \"  Fetching checksums …\"\n    curl -fSL --retry 3 -o \"$_tmp_dir/$_checksums_file\" \"$_base_url/$_checksums_file\"\n\n    # Download parts sequentially\n    for _part in \"${_parts[@]}\"; do\n      echo \"  Downloading $_part …\"\n      curl -fSL --retry 3 -o \"$_tmp_dir/$_part\" \"$_base_url/$_part\"\n    done\n\n    # Verify checksums\n    echo \"  Verifying checksums …\"\n    (cd \"$_tmp_dir\" && sha256sum -c \"$_checksums_file\")\n\n    # Extract into staging directory\n    local _staging_dir\n    _staging_dir=\"$(mktemp -d \"${VLLM_MODELS_DIR}/.staging-${_default_model}.XXXXXX\")\"\n    echo \"  Extracting model …\"\n    cat \"$_tmp_dir\"/phi-4-mini-instruct.tar.part-* | tar xf - -C \"$_staging_dir\"\n\n    # Fix permissions so we can write provenance file\n    chmod -R u+w \"$_staging_dir\"\n\n    # Remove downloaded parts immediately to free disk\n    rm -f \"$_tmp_dir\"/phi-4-mini-instruct.tar.part-*\n    rm -f \"$_tmp_dir/$_checksums_file\"\n    rmdir \"$_tmp_dir\"\n\n    # Write provenance file\n    cat > \"$_staging_dir/.vllm-model-provenance\" <<PROVENANCE\nschema=1\ncomplete=1\nmodel=${_default_model}\nmodel_id=microsoft/${_default_model}\nmodel_identity=microsoft/${_default_model}\nidentity_hash=${_identity_hash}\nmodel_revision=\nresolved_via=github-release\ndetail=${_gh_repo}@${_gh_tag}\ncreated_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')\nPROVENANCE\n\n    # Atomic swap into final location\n    mv \"$_staging_dir\" \"$_model_dir\"\n\n    trap - ERR\n    echo \"══════════════════════════════════════════════════════════════\"\n    echo \"  Model downloaded and verified successfully.\"\n    echo \"  Location: $_model_dir\"\n    echo \"══════════════════════════════════════════════════════════════\"\n  }\n  _gh_release_model_download\n"
     },
-    "profile": {},
     "options": {},
     "services": {
       "vllm": {
@@ -45,7 +43,7 @@
       "rev": "9dcb002ca1690658be4a04645215baea8b95f31d",
       "rev_count": 960399,
       "rev_date": "2026-03-08T09:52:19Z",
-      "scrape_date": "2026-03-14T16:07:54.680944930Z",
+      "scrape_date": "2026-03-16T00:43:26.691133953Z",
       "stabilities": [
         "unstable"
       ],
@@ -74,7 +72,7 @@
       "rev": "f9edcd88431b81d82958cc0775e1e4fb275aab83",
       "rev_count": 12,
       "rev_date": "2026-03-14T16:07:32Z",
-      "scrape_date": "2026-03-14T16:07:54.680948004Z",
+      "scrape_date": "2026-03-16T00:43:26.691138771Z",
       "stabilities": [
         "unstable",
         "staging",
