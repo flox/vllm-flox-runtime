@@ -585,6 +585,124 @@ curl http://127.0.0.1:3000/api/health        # Grafana health
 
 Raw vLLM metrics are always available at `http://127.0.0.1:8000/metrics` without additional packages.
 
+## Kubernetes deployment
+
+Deploy vLLM to Kubernetes using the Flox "Imageless Kubernetes" (uncontained) pattern. The Flox containerd shim pulls the environment from FloxHub at pod startup, replacing the need for a container image.
+
+### Prerequisites
+
+- A Kubernetes cluster with the [Flox containerd shim](https://flox.dev/docs/tutorials/kubernetes/) installed on GPU nodes
+- NVIDIA GPU operator or device plugin configured
+- A StorageClass that supports `ReadWriteOnce` PVCs
+
+### Deploy
+
+```bash
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/pvc.yaml
+kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/service.yaml
+```
+
+### What the manifests do
+
+| File | Purpose |
+|------|---------|
+| `k8s/namespace.yaml` | Creates the `vllm` namespace |
+| `k8s/pvc.yaml` | 50 Gi `ReadWriteOnce` volume for model storage at `/models` |
+| `k8s/deployment.yaml` | Single-replica pod with Flox shim, GPU resources, health probes |
+| `k8s/service.yaml` | ClusterIP service on port 8000 |
+
+The deployment uses `runtimeClassName: flox` and `image: flox/empty:1.0.0` — the Flox shim intercepts pod creation, pulls `barstoolbluz/vllm-runtime` from FloxHub, activates the environment, then runs the entrypoint (`vllm-preflight && vllm-resolve-model && vllm-serve`).
+
+### Storage
+
+Model weights are stored on the PVC mounted at `/models`. The pod sets `VLLM_MODELS_DIR=/models` to override the local default (`$FLOX_ENV_PROJECT/models`). The default Phi-4-mini-instruct model (~7.2 GB) is downloaded from GitHub Releases on first startup; subsequent restarts use the cached copy.
+
+Set the `storageClassName` in `k8s/pvc.yaml` to match your cluster:
+
+```yaml
+storageClassName: gp3  # AWS EBS
+storageClassName: standard-rwo  # GKE
+storageClassName: managed-premium  # AKS
+```
+
+### Secrets
+
+Create a Kubernetes Secret for API authentication and gated model access, then uncomment the `secretKeyRef` blocks in the deployment:
+
+```bash
+kubectl -n vllm create secret generic vllm-secrets \
+  --from-literal=api-key='your-production-api-key' \
+  --from-literal=hf-token='hf_...'
+```
+
+Without the secret, `VLLM_API_KEY` defaults to `sk-vllm-local-dev` from the on-activate hook.
+
+### Customizing the model
+
+Override the model via pod environment variables:
+
+```yaml
+env:
+  - name: VLLM_MODEL
+    value: "Qwen2.5-7B-Instruct"
+  - name: VLLM_MODEL_ORG
+    value: "Qwen"
+```
+
+For multi-GPU inference, set `VLLM_TENSOR_PARALLEL_SIZE` and request additional GPUs:
+
+```yaml
+env:
+  - name: VLLM_TENSOR_PARALLEL_SIZE
+    value: "2"
+resources:
+  limits:
+    nvidia.com/gpu: 2
+```
+
+### Startup timing
+
+The `startupProbe` allows 10 minutes (60 failures x 10s) for warm starts with a cached model on the PVC. For cold starts (first-time model download), increase the threshold:
+
+```yaml
+startupProbe:
+  failureThreshold: 120  # 20 minutes for cold start
+```
+
+Liveness and readiness probes are gated behind the startup probe and will not kill slow-starting pods.
+
+### Verifying the deployment
+
+```bash
+# Watch pod startup
+kubectl -n vllm get pods -w
+
+# Check logs
+kubectl -n vllm logs -f deployment/vllm
+
+# Health check (from within the cluster)
+kubectl -n vllm run curl --rm -it --image=curlimages/curl -- \
+  curl http://vllm:8000/health
+
+# Port-forward for local access
+kubectl -n vllm port-forward svc/vllm 8000:8000
+curl http://localhost:8000/health
+```
+
+### Exposing externally
+
+The service defaults to `ClusterIP`. For external access, change the type or add an Ingress:
+
+```bash
+# Quick LoadBalancer
+kubectl -n vllm patch svc vllm -p '{"spec":{"type":"LoadBalancer"}}'
+
+# Or use port-forward for development
+kubectl -n vllm port-forward svc/vllm 8000:8000
+```
+
 ## Troubleshooting
 
 Common issues and their solutions. Exit codes refer to `vllm-preflight`.
@@ -703,6 +821,7 @@ VLLM_LOGGING_LEVEL=DEBUG flox activate --start-services
 vllm-runtime/
   .flox/env/manifest.toml   # Flox manifest (packages, on-activate hook, service)
   .flox/cache/vllm-config.yaml  # vLLM server config (auto-copied from package on first run)
+  k8s/                       # Kubernetes manifests (Flox uncontained pattern)
   models/                    # Model cache (created on activation)
   examples/                  # Demo scripts (flox-bundled and HF-cached models)
   README.md                  # This file
