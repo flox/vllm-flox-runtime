@@ -1,13 +1,10 @@
 # vLLM Runtime
 
-Production vLLM inference server as a Flox environment. Installs `flox/vllm-flox-runtime` (model provisioning and serving scripts) and `flox/vllm-python312-cuda12_9-sm120` (vLLM + CUDA + Python) from the Flox catalog.
+Production vLLM inference server as a Flox environment. Installs `flox/vllm-flox-runtime` (model provisioning and serving scripts) and `flox-cuda/python3Packages.vllm` (vLLM + CUDA + Python) from the Flox catalog.
 
 - **vLLM**: 0.15.1
-- **CUDA**: 12.9 (requires NVIDIA driver 575+)
-- **Target**: SM120 (RTX 5090 / Blackwell)
-- **Python**: 3.12
-
-Swap the SM variant in the manifest for your GPU (e.g., `sm90` for H100, `sm89` for RTX 4090).
+- **CUDA**: requires NVIDIA driver with CUDA support
+- **Platform**: Linux only (`x86_64-linux`)
 
 ## Quick start
 
@@ -36,7 +33,7 @@ curl http://127.0.0.1:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer sk-vllm-local-dev" \
   -d '{
-    "model": "Llama-3.1-8B-Instruct",
+    "model": "Phi-3.5-mini-instruct",
     "messages": [{"role": "user", "content": "Hello!"}],
     "max_tokens": 256
   }'
@@ -46,20 +43,16 @@ curl http://127.0.0.1:8000/v1/chat/completions \
 
 The `examples/` directory contains self-contained demo scripts that start a vLLM server, run smoke tests (health, models, completions, chat), and shut down cleanly.
 
-### Default model (Phi-4-mini-instruct-FP8-TORCHAO)
+### Default model (Phi-3.5-mini-instruct-AWQ)
 
-```bash
-flox activate -- ./examples/demo-phi-4-mini-instruct-fp8.sh
-```
+The default model is `microsoft/Phi-3.5-mini-instruct-AWQ` (~2.2 GB, AWQ 4-bit quantization). It is installed as a Flox package via Nix store-path and resolved via the `flox` source. No download required — the model is available immediately after activation. AWQ 4-bit quantization works on all CUDA GPUs including Tesla T4 (sm75).
 
-Serves `microsoft/Phi-4-mini-instruct-FP8-TORCHAO` (~5 GB VRAM). The FP8-quantized model is installed as a Flox package and resolved via the `flox` source. No download required — the model is available immediately after activation.
-
-### Customizing demos
+### Customizing
 
 Override the default port:
 
 ```bash
-VLLM_PORT=8800 flox activate -- ./examples/demo-phi-4-mini-instruct-fp8.sh
+VLLM_PORT=8800 flox activate --start-services
 ```
 
 ## Architecture
@@ -124,7 +117,7 @@ curl http://127.0.0.1:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer sk-vllm-local-dev" \
   -d '{
-    "model": "Llama-3.1-8B-Instruct",
+    "model": "Phi-3.5-mini-instruct",
     "messages": [
       {"role": "system", "content": "You are a helpful assistant."},
       {"role": "user", "content": "Explain TCP in one paragraph."}
@@ -141,7 +134,7 @@ curl --no-buffer http://127.0.0.1:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer sk-vllm-local-dev" \
   -d '{
-    "model": "Llama-3.1-8B-Instruct",
+    "model": "Phi-3.5-mini-instruct",
     "messages": [{"role": "user", "content": "Write a haiku about CUDA."}],
     "max_tokens": 64,
     "stream": true
@@ -155,7 +148,7 @@ curl http://127.0.0.1:8000/v1/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer sk-vllm-local-dev" \
   -d '{
-    "model": "Llama-3.1-8B-Instruct",
+    "model": "Phi-3.5-mini-instruct",
     "prompt": "The capital of France is",
     "max_tokens": 32
   }'
@@ -173,8 +166,9 @@ A default config is bundled in the `vllm-flox-runtime` package and auto-copied t
 |-----------|---------|-------------|
 | `host` | `0.0.0.0` | Bind address |
 | `port` | `8000` | HTTP listen port |
-| `dtype` | `auto` | Weight data type. `auto` selects BF16 for BF16 models, FP16 for FP16/FP32 models |
-| `gpu-memory-utilization` | `0.92` | Per-GPU VRAM fraction for KV cache. 0.92 is aggressive but stable for 24 GB cards (~2 GB headroom for CUDA context). Use 0.95 for 48 GB+ cards. Reduce if you see OOM during prefill |
+| `dtype` | `float16` | Weight data type. Use `float16` for AWQ-quantized models; `auto` selects BF16 for BF16 models, FP16 for FP16/FP32 models |
+| `gpu-memory-utilization` | `0.85` | Per-GPU VRAM fraction for KV cache. Reduce if you see OOM during prefill. Increase for cards with more headroom (e.g., 0.92 for 24 GB, 0.95 for 48 GB+) |
+| `quantization` | `awq` | Quantization method. Set to match the model's quantization (e.g., `awq`, `gptq`). Remove for unquantized models |
 | `disable-log-requests` | `true` | Suppress per-request logging |
 | `uvicorn-log-level` | `warning` | Uvicorn server log level |
 
@@ -190,11 +184,11 @@ VLLM_MAX_MODEL_LEN=16384 VLLM_KV_CACHE_DTYPE=fp8 flox activate --start-services
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VLLM_MODEL` | `Phi-4-mini-instruct-FP8-TORCHAO` | Model directory name. Must be a single safe path element (no `/`, `\`, `.`, `..`, or control characters) |
+| `VLLM_MODEL` | `Phi-3.5-mini-instruct-AWQ` | Model directory name. Must be a single safe path element (no `/`, `\`, `.`, `..`, or control characters) |
 | `VLLM_MODEL_ORG` | `microsoft` | HuggingFace org. Used to derive the model ID as `$VLLM_MODEL_ORG/$VLLM_MODEL` when `VLLM_MODEL_ID` is not set |
 | `VLLM_MODEL_SOURCES` | `flox,local,hf-cache,hf-hub` | Comma-separated source order for model provisioning. Available sources: `flox`, `local`, `hf-cache`, `r2`, `hf-hub` |
 | `VLLM_MODELS_DIR` | `$FLOX_ENV_PROJECT/models` | Root directory for model storage and HF cache. Created automatically on activation |
-| `VLLM_SERVED_MODEL_NAME` | `Phi-4-mini-instruct` | Model name returned in `/v1/models` responses and used in API requests |
+| `VLLM_SERVED_MODEL_NAME` | `Phi-3.5-mini-instruct` | Model name returned in `/v1/models` responses and used in API requests |
 
 #### Server settings
 
@@ -617,7 +611,7 @@ The deployment uses `runtimeClassName: flox` and `image: flox/empty:1.0.0` — t
 
 ### Storage
 
-Model weights are stored on the PVC mounted at `/models`. The pod sets `VLLM_MODELS_DIR=/models` to override the local default (`$FLOX_ENV_PROJECT/models`). The default Phi-4-mini-instruct-FP8-TORCHAO model is included as a Flox package and resolved via the `flox` source — no download required at startup.
+Model weights are stored on the PVC mounted at `/models`. The pod sets `VLLM_MODELS_DIR=/models` to override the local default (`$FLOX_ENV_PROJECT/models`). The default Phi-3.5-mini-instruct-AWQ model is included as a Flox package and resolved via the `flox` source — no download required at startup.
 
 Set the `storageClassName` in `k8s/pvc.yaml` to match your cluster:
 
