@@ -9,9 +9,8 @@ vllm.systems = ["x86_64-linux"]
 vllm.version = "0.15.1"
 vllm.pkg-group = "vllm"
 vllm.outputs = "all"
-# phi-4-mini-instruct-fp8-torchao.pkg-path = "flox/phi-4-mini-instruct-fp8-torchao"
-# phi-4-mini-instruct-fp8-torchao.pkg-group = "phi-4-mini-instruct-fp8-torchao"
-phi-3-5-mini-instruct-awq.store-path = "/nix/store/106aab58dnblxmihxk9cccxvyg0b9ca4-phi-3.5-mini-instruct-awq-1.0.0+d6c46be"
+vllm-phi-3-5-mini-instruct-awq.pkg-path = "flox/vllm-phi-3-5-mini-instruct-awq"
+vllm-phi-3-5-mini-instruct-awq.pkg-group = "vllm-phi-3-5-mini-instruct-awq"
 
 
 [hook]

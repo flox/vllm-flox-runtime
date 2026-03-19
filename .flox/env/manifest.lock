@@ -3,9 +3,6 @@
   "manifest": {
     "schema-version": "1.10.0",
     "install": {
-      "phi-3-5-mini-instruct-awq": {
-        "store-path": "/nix/store/106aab58dnblxmihxk9cccxvyg0b9ca4-phi-3.5-mini-instruct-awq-1.0.0+d6c46be"
-      },
       "vllm": {
         "pkg-path": "flox-cuda/python3Packages.vllm",
         "pkg-group": "vllm",
@@ -21,6 +18,10 @@
         "systems": [
           "x86_64-linux"
         ]
+      },
+      "vllm-phi-3-5-mini-instruct-awq": {
+        "pkg-path": "flox/vllm-phi-3-5-mini-instruct-awq",
+        "pkg-group": "vllm-phi-3-5-mini-instruct-awq"
       }
     },
     "hook": {
@@ -38,12 +39,6 @@
     }
   },
   "packages": [
-    {
-      "install_id": "phi-3-5-mini-instruct-awq",
-      "store_path": "/nix/store/106aab58dnblxmihxk9cccxvyg0b9ca4-phi-3.5-mini-instruct-awq-1.0.0+d6c46be",
-      "system": "x86_64-linux",
-      "priority": 5
-    },
     {
       "attr_path": "python3Packages.vllm",
       "broken": false,
@@ -102,6 +97,33 @@
       },
       "system": "x86_64-linux",
       "group": "vllm-flox-runtime",
+      "priority": 5
+    },
+    {
+      "attr_path": "vllm-phi-3-5-mini-instruct-awq",
+      "broken": false,
+      "derivation": "/nix/store/cjyv77cbmdjlwchnq0hnvn9q094yz5sn-vllm-phi-3.5-mini-instruct-awq-1.0.1+d6c46be.drv",
+      "install_id": "vllm-phi-3-5-mini-instruct-awq",
+      "locked_url": "git@github.com:barstoolbluz/build-hf-models.git?rev=fa2ef3e6e5fbe95bf0acb8a597b2057a6d0b0685",
+      "name": "vllm-phi-3.5-mini-instruct-awq-1.0.1+d6c46be",
+      "pname": "vllm-phi-3.5-mini-instruct-awq",
+      "rev": "fa2ef3e6e5fbe95bf0acb8a597b2057a6d0b0685",
+      "rev_count": 15,
+      "rev_date": "2026-03-19T22:15:33Z",
+      "scrape_date": "2026-03-19T22:37:15.463542981Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.0.1+d6c46be",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/kcqm00xidrxvyyg0v96viccvbbg6syy4-vllm-phi-3.5-mini-instruct-awq-1.0.1+d6c46be"
+      },
+      "system": "x86_64-linux",
+      "group": "vllm-phi-3-5-mini-instruct-awq",
       "priority": 5
     }
   ]
