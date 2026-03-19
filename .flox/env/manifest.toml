@@ -1,4 +1,4 @@
-version = 1
+schema-version = "1.10.0"
 
 [install]
 vllm-flox-runtime.pkg-path = "flox/vllm-flox-runtime"
@@ -8,16 +8,19 @@ vllm.pkg-path = "flox-cuda/python3Packages.vllm"
 vllm.systems = ["x86_64-linux"]
 vllm.version = "0.15.1"
 vllm.pkg-group = "vllm"
+vllm.outputs = "all"
+phi-4-mini-instruct-fp8-torchao.pkg-path = "flox/phi-4-mini-instruct-fp8-torchao"
+phi-4-mini-instruct-fp8-torchao.pkg-group = "phi-4-mini-instruct-fp8-torchao"
 
 
 [hook]
 on-activate = '''
   # Model
-  export VLLM_MODEL="${VLLM_MODEL:-Phi-4-mini-instruct}"
+  export VLLM_MODEL="${VLLM_MODEL:-Phi-4-mini-instruct-FP8-TORCHAO}"
   export VLLM_MODEL_ORG="${VLLM_MODEL_ORG:-microsoft}"
-  export VLLM_MODEL_SOURCES="${VLLM_MODEL_SOURCES:-local,hf-cache,hf-hub}"
+  export VLLM_MODEL_SOURCES="${VLLM_MODEL_SOURCES:-flox,local,hf-cache,hf-hub}"
   export VLLM_MODELS_DIR="${VLLM_MODELS_DIR:-$FLOX_ENV_PROJECT/models}"
-  export VLLM_SERVED_MODEL_NAME="${VLLM_SERVED_MODEL_NAME:-$VLLM_MODEL}"
+  export VLLM_SERVED_MODEL_NAME="${VLLM_SERVED_MODEL_NAME:-Phi-4-mini-instruct}"
 
   # Server
   export VLLM_HOST="${VLLM_HOST:-0.0.0.0}"
@@ -34,7 +37,7 @@ on-activate = '''
 
   # Logging / metrics
   export VLLM_LOGGING_LEVEL="${VLLM_LOGGING_LEVEL:-WARNING}"
-  export PROMETHEUS_MULTIPROC_DIR="${PROMETHEUS_MULTIPROC_DIR:-/tmp/vllm-prometheus}"
+  export PROMETHEUS_MULTIPROC_DIR="${PROMETHEUS_MULTIPROC_DIR:-$FLOX_ENV_CACHE/vllm-prometheus}"
 
   mkdir -p "$VLLM_MODELS_DIR"
   mkdir -p "$PROMETHEUS_MULTIPROC_DIR"
@@ -57,93 +60,6 @@ VLLM_YAML
     printf '\ncompilation-config: '\''{"level": 0}'\''\n' >> "$_vllm_config"
   fi
 
-  # ── Download default model from GitHub Releases (first activation) ──
-  _gh_release_model_download() {
-    local _default_model="Phi-4-mini-instruct"
-    # Only run for the default model; user overrides skip this entirely
-    if [[ "$VLLM_MODEL" != "$_default_model" ]]; then
-      return 0
-    fi
-
-    local _identity_hash="9806f0c862fd"
-    local _model_dir="$VLLM_MODELS_DIR/${_default_model}.${_identity_hash}"
-
-    # Idempotent: skip if already downloaded
-    if [[ -f "$_model_dir/config.json" ]]; then
-      return 0
-    fi
-
-    echo "══════════════════════════════════════════════════════════════"
-    echo "  Downloading ${_default_model} model weights …"
-    echo "  (one-time download, ~7.2 GB from GitHub Releases)"
-    echo "══════════════════════════════════════════════════════════════"
-
-    local _gh_tag="phi-4-mini-instruct-v1.0"
-    local _gh_repo="barstoolbluz/build-hf-models"
-    local _base_url="https://github.com/${_gh_repo}/releases/download/${_gh_tag}"
-    local _parts=( "phi-4-mini-instruct.tar.part-aa"
-                   "phi-4-mini-instruct.tar.part-ab"
-                   "phi-4-mini-instruct.tar.part-ac"
-                   "phi-4-mini-instruct.tar.part-ad" )
-    local _checksums_file="phi-4-mini-instruct.sha256sums"
-    local _tmp_dir
-    _tmp_dir="$(mktemp -d "${VLLM_MODELS_DIR}/.dl-${_default_model}.XXXXXX")"
-
-    # Clean up on any failure
-    trap 'rm -rf "$_tmp_dir" "${_staging_dir:-}"; echo "ERROR: model download failed — cleaned up temp files." >&2' ERR
-
-    # Download checksums
-    echo "  Fetching checksums …"
-    curl -fSL --retry 3 -o "$_tmp_dir/$_checksums_file" "$_base_url/$_checksums_file"
-
-    # Download parts sequentially
-    for _part in "${_parts[@]}"; do
-      echo "  Downloading $_part …"
-      curl -fSL --retry 3 -o "$_tmp_dir/$_part" "$_base_url/$_part"
-    done
-
-    # Verify checksums
-    echo "  Verifying checksums …"
-    (cd "$_tmp_dir" && sha256sum -c "$_checksums_file")
-
-    # Extract into staging directory
-    local _staging_dir
-    _staging_dir="$(mktemp -d "${VLLM_MODELS_DIR}/.staging-${_default_model}.XXXXXX")"
-    echo "  Extracting model …"
-    cat "$_tmp_dir"/phi-4-mini-instruct.tar.part-* | tar xf - -C "$_staging_dir"
-
-    # Fix permissions so we can write provenance file
-    chmod -R u+w "$_staging_dir"
-
-    # Remove downloaded parts immediately to free disk
-    rm -f "$_tmp_dir"/phi-4-mini-instruct.tar.part-*
-    rm -f "$_tmp_dir/$_checksums_file"
-    rmdir "$_tmp_dir"
-
-    # Write provenance file
-    cat > "$_staging_dir/.vllm-model-provenance" <<PROVENANCE
-schema=1
-complete=1
-model=${_default_model}
-model_id=microsoft/${_default_model}
-model_identity=microsoft/${_default_model}
-identity_hash=${_identity_hash}
-model_revision=
-resolved_via=github-release
-detail=${_gh_repo}@${_gh_tag}
-created_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-PROVENANCE
-
-    # Atomic swap into final location
-    mv "$_staging_dir" "$_model_dir"
-
-    trap - ERR
-    echo "══════════════════════════════════════════════════════════════"
-    echo "  Model downloaded and verified successfully."
-    echo "  Location: $_model_dir"
-    echo "══════════════════════════════════════════════════════════════"
-  }
-  _gh_release_model_download
 '''
 
 
@@ -152,12 +68,6 @@ vllm.command = "vllm-preflight && vllm-resolve-model && vllm-serve"
 
 
 [options]
-# Systems that environment is compatible with
-# systems = [
-#   "aarch64-darwin",
-#   "aarch64-linux",
-#   "x86_64-darwin",
-#   "x86_64-linux",
-# ]
+systems = ["x86_64-linux"]
 # Uncomment to disable CUDA detection.
 # cuda-detection = false

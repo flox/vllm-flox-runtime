@@ -20,8 +20,8 @@ spec:
       annotations:
         flox.dev/environment: "barstoolbluz/vllm-runtime"
         # Activate mode "run" (the default) is correct here — the on-activate
-        # hook only sets env vars, creates directories, generates config, and
-        # downloads the model archive. No build tools required.
+        # hook only sets env vars, creates directories, and generates config.
+        # No build tools required.
     spec:
       runtimeClassName: flox
 
@@ -66,7 +66,7 @@ spec:
             # Uncomment any of these to override on-activate defaults:
             #
             # - name: VLLM_MODEL
-            #   value: "Phi-4-mini-instruct"
+            #   value: "Phi-4-mini-instruct-FP8-TORCHAO"
             # - name: VLLM_MODEL_ORG
             #   value: "microsoft"
             # - name: VLLM_TENSOR_PARALLEL_SIZE
@@ -98,7 +98,7 @@ spec:
           # startupProbe gates liveness/readiness until the pod is ready.
           # Budget: 60 failures * 10s = 600s (10 min) covers warm starts
           # with a cached model on PVC. For cold starts (first-time model
-          # download of ~7.2 GB), increase failureThreshold to 120 (20 min).
+          # download), increase failureThreshold to 120 (20 min).
           startupProbe:
             httpGet:
               path: /health

@@ -46,20 +46,20 @@ curl http://127.0.0.1:8000/v1/chat/completions \
 
 The `examples/` directory contains self-contained demo scripts that start a vLLM server, run smoke tests (health, models, completions, chat), and shut down cleanly.
 
-### Default model (Phi-4-mini-instruct)
+### Default model (Phi-4-mini-instruct-FP8-TORCHAO)
 
 ```bash
-flox activate -- ./examples/demo-phi-4-mini-instruct.sh
+flox activate -- ./examples/demo-phi-4-mini-instruct-fp8.sh
 ```
 
-Serves `microsoft/Phi-4-mini-instruct` (~8 GB VRAM). The model is downloaded from GitHub Releases on first `flox activate` and resolved via the `local` source. No HuggingFace account or token required.
+Serves `microsoft/Phi-4-mini-instruct-FP8-TORCHAO` (~5 GB VRAM). The FP8-quantized model is installed as a Flox package and resolved via the `flox` source. No download required — the model is available immediately after activation.
 
 ### Customizing demos
 
 Override the default port:
 
 ```bash
-VLLM_PORT=8800 flox activate -- ./examples/demo-phi-4-mini-instruct.sh
+VLLM_PORT=8800 flox activate -- ./examples/demo-phi-4-mini-instruct-fp8.sh
 ```
 
 ## Architecture
@@ -190,11 +190,11 @@ VLLM_MAX_MODEL_LEN=16384 VLLM_KV_CACHE_DTYPE=fp8 flox activate --start-services
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `VLLM_MODEL` | `Llama-3.1-8B-Instruct` | Model directory name. Must be a single safe path element (no `/`, `\`, `.`, `..`, or control characters) |
-| `VLLM_MODEL_ORG` | `meta-llama` | HuggingFace org. Used to derive the model ID as `$VLLM_MODEL_ORG/$VLLM_MODEL` when `VLLM_MODEL_ID` is not set |
-| `VLLM_MODEL_SOURCES` | `local,hf-cache,hf-hub` | Comma-separated source order for model provisioning. Available sources: `flox`, `local`, `hf-cache`, `r2`, `hf-hub` |
+| `VLLM_MODEL` | `Phi-4-mini-instruct-FP8-TORCHAO` | Model directory name. Must be a single safe path element (no `/`, `\`, `.`, `..`, or control characters) |
+| `VLLM_MODEL_ORG` | `microsoft` | HuggingFace org. Used to derive the model ID as `$VLLM_MODEL_ORG/$VLLM_MODEL` when `VLLM_MODEL_ID` is not set |
+| `VLLM_MODEL_SOURCES` | `flox,local,hf-cache,hf-hub` | Comma-separated source order for model provisioning. Available sources: `flox`, `local`, `hf-cache`, `r2`, `hf-hub` |
 | `VLLM_MODELS_DIR` | `$FLOX_ENV_PROJECT/models` | Root directory for model storage and HF cache. Created automatically on activation |
-| `VLLM_SERVED_MODEL_NAME` | `$VLLM_MODEL` | Model name returned in `/v1/models` responses and used in API requests |
+| `VLLM_SERVED_MODEL_NAME` | `Phi-4-mini-instruct` | Model name returned in `/v1/models` responses and used in API requests |
 
 #### Server settings
 
@@ -220,7 +220,7 @@ VLLM_MAX_MODEL_LEN=16384 VLLM_KV_CACHE_DTYPE=fp8 flox activate --start-services
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `VLLM_LOGGING_LEVEL` | `WARNING` | vLLM Python log level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
-| `PROMETHEUS_MULTIPROC_DIR` | `/tmp/vllm-prometheus` | Directory for Prometheus client multiprocess metrics. Created automatically on activation |
+| `PROMETHEUS_MULTIPROC_DIR` | `$FLOX_ENV_CACHE/vllm-prometheus` | Directory for Prometheus client multiprocess metrics. Created automatically on activation |
 
 ## Model provisioning (`vllm-resolve-model`)
 
@@ -228,7 +228,7 @@ Searches configured sources in order, validates the model directory, and writes 
 
 ### Source table
 
-Sources are tried in the order specified by `VLLM_MODEL_SOURCES`. The script's internal default is `flox,local,hf-cache,r2,hf-hub`; the manifest overrides this to `local,hf-cache,hf-hub`.
+Sources are tried in the order specified by `VLLM_MODEL_SOURCES`. The script's internal default is `flox,local,hf-cache,r2,hf-hub`; the manifest sets `flox,local,hf-cache,hf-hub`.
 
 | Source | What it checks | Skip condition | Resolution |
 |--------|---------------|----------------|------------|
@@ -252,7 +252,7 @@ Sources are tried in the order specified by `VLLM_MODEL_SOURCES`. The script's i
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `VLLM_MODEL_ID` | Derived from `$VLLM_MODEL_ORG/$VLLM_MODEL` | Explicit HuggingFace model ID (`org/name`). When empty, derived from `VLLM_MODEL_ORG` (which must then be set) |
-| `VLLM_MODEL_ORG` | _(none; manifest sets `meta-llama`)_ | Org prefix for deriving model ID. Required when `VLLM_MODEL_ID` is empty |
+| `VLLM_MODEL_ORG` | _(none; manifest sets `microsoft`)_ | Org prefix for deriving model ID. Required when `VLLM_MODEL_ID` is empty |
 | `VLLM_MODEL_SOURCES` | `flox,local,hf-cache,r2,hf-hub` | Comma-separated source order |
 | `FLOX_ENV` | _(set by Flox)_ | Flox environment path. Required for `flox` source |
 | `FLOX_ENV_CACHE` | _(set by Flox)_ | Cache directory for env files. Required when `VLLM_MODEL_ENV_FILE` is not set |
@@ -617,7 +617,7 @@ The deployment uses `runtimeClassName: flox` and `image: flox/empty:1.0.0` — t
 
 ### Storage
 
-Model weights are stored on the PVC mounted at `/models`. The pod sets `VLLM_MODELS_DIR=/models` to override the local default (`$FLOX_ENV_PROJECT/models`). The default Phi-4-mini-instruct model (~7.2 GB) is downloaded from GitHub Releases on first startup; subsequent restarts use the cached copy.
+Model weights are stored on the PVC mounted at `/models`. The pod sets `VLLM_MODELS_DIR=/models` to override the local default (`$FLOX_ENV_PROJECT/models`). The default Phi-4-mini-instruct-FP8-TORCHAO model is included as a Flox package and resolved via the `flox` source — no download required at startup.
 
 Set the `storageClassName` in `k8s/pvc.yaml` to match your cluster:
 
