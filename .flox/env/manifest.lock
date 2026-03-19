@@ -3,9 +3,8 @@
   "manifest": {
     "schema-version": "1.10.0",
     "install": {
-      "phi-4-mini-instruct-fp8-torchao": {
-        "pkg-path": "flox/phi-4-mini-instruct-fp8-torchao",
-        "pkg-group": "phi-4-mini-instruct-fp8-torchao"
+      "phi-3-5-mini-instruct-awq": {
+        "store-path": "/nix/store/106aab58dnblxmihxk9cccxvyg0b9ca4-phi-3.5-mini-instruct-awq-1.0.0+d6c46be"
       },
       "vllm": {
         "pkg-path": "flox-cuda/python3Packages.vllm",
@@ -25,7 +24,7 @@
       }
     },
     "hook": {
-      "on-activate": "  # Model\n  export VLLM_MODEL=\"${VLLM_MODEL:-Phi-4-mini-instruct-FP8-TORCHAO}\"\n  export VLLM_MODEL_ORG=\"${VLLM_MODEL_ORG:-microsoft}\"\n  export VLLM_MODEL_SOURCES=\"${VLLM_MODEL_SOURCES:-flox,local,hf-cache,hf-hub}\"\n  export VLLM_MODELS_DIR=\"${VLLM_MODELS_DIR:-$FLOX_ENV_PROJECT/models}\"\n  export VLLM_SERVED_MODEL_NAME=\"${VLLM_SERVED_MODEL_NAME:-Phi-4-mini-instruct}\"\n\n  # Server\n  export VLLM_HOST=\"${VLLM_HOST:-0.0.0.0}\"\n  export VLLM_PORT=\"${VLLM_PORT:-8000}\"\n  export VLLM_API_KEY=\"${VLLM_API_KEY:-sk-vllm-local-dev}\"\n\n  # Engine tuning\n  export VLLM_TENSOR_PARALLEL_SIZE=\"${VLLM_TENSOR_PARALLEL_SIZE:-1}\"\n  export VLLM_PIPELINE_PARALLEL_SIZE=\"${VLLM_PIPELINE_PARALLEL_SIZE:-1}\"\n  export VLLM_PREFIX_CACHING=\"${VLLM_PREFIX_CACHING:-false}\"\n  export VLLM_KV_CACHE_DTYPE=\"${VLLM_KV_CACHE_DTYPE:-auto}\"\n  export VLLM_MAX_MODEL_LEN=\"${VLLM_MAX_MODEL_LEN:-4096}\"\n  export VLLM_MAX_NUM_BATCHED_TOKENS=\"${VLLM_MAX_NUM_BATCHED_TOKENS:-4096}\"\n\n  # Logging / metrics\n  export VLLM_LOGGING_LEVEL=\"${VLLM_LOGGING_LEVEL:-WARNING}\"\n  export PROMETHEUS_MULTIPROC_DIR=\"${PROMETHEUS_MULTIPROC_DIR:-$FLOX_ENV_CACHE/vllm-prometheus}\"\n\n  mkdir -p \"$VLLM_MODELS_DIR\"\n  mkdir -p \"$PROMETHEUS_MULTIPROC_DIR\"\n\n  # ── Ensure vllm config has compilation disabled (nvcc not on PATH) ──\n  _vllm_config=\"$FLOX_ENV_CACHE/vllm-config.yaml\"\n  if [[ ! -f \"$_vllm_config\" ]]; then\n    cat > \"$_vllm_config\" <<'VLLM_YAML'\nhost: \"0.0.0.0\"\nport: 8000\n\ndtype: auto\ngpu-memory-utilization: 0.92\ncompilation-config: '{\"level\": 0}'\n\ndisable-log-requests: true\nuvicorn-log-level: \"warning\"\nVLLM_YAML\n  elif ! grep -q 'compilation-config' \"$_vllm_config\"; then\n    printf '\\ncompilation-config: '\\''{\"level\": 0}'\\''\\n' >> \"$_vllm_config\"\n  fi\n\n"
+      "on-activate": "  # Model\n  export VLLM_MODEL=\"${VLLM_MODEL:-Phi-3.5-mini-instruct-AWQ}\"\n  export VLLM_MODEL_ORG=\"${VLLM_MODEL_ORG:-microsoft}\"\n  export VLLM_MODEL_SOURCES=\"${VLLM_MODEL_SOURCES:-flox,local,hf-cache,hf-hub}\"\n  export VLLM_MODELS_DIR=\"${VLLM_MODELS_DIR:-$FLOX_ENV_PROJECT/models}\"\n  export VLLM_SERVED_MODEL_NAME=\"${VLLM_SERVED_MODEL_NAME:-Phi-3.5-mini-instruct}\"\n\n  # Server\n  export VLLM_HOST=\"${VLLM_HOST:-0.0.0.0}\"\n  export VLLM_PORT=\"${VLLM_PORT:-8000}\"\n  export VLLM_API_KEY=\"${VLLM_API_KEY:-sk-vllm-local-dev}\"\n\n  # Engine tuning\n  export VLLM_TENSOR_PARALLEL_SIZE=\"${VLLM_TENSOR_PARALLEL_SIZE:-1}\"\n  export VLLM_PIPELINE_PARALLEL_SIZE=\"${VLLM_PIPELINE_PARALLEL_SIZE:-1}\"\n  export VLLM_PREFIX_CACHING=\"${VLLM_PREFIX_CACHING:-false}\"\n  export VLLM_KV_CACHE_DTYPE=\"${VLLM_KV_CACHE_DTYPE:-auto}\"\n  export VLLM_MAX_MODEL_LEN=\"${VLLM_MAX_MODEL_LEN:-4096}\"\n  export VLLM_MAX_NUM_BATCHED_TOKENS=\"${VLLM_MAX_NUM_BATCHED_TOKENS:-4096}\"\n\n  # Logging / metrics\n  export VLLM_LOGGING_LEVEL=\"${VLLM_LOGGING_LEVEL:-WARNING}\"\n  export PROMETHEUS_MULTIPROC_DIR=\"${PROMETHEUS_MULTIPROC_DIR:-$FLOX_ENV_CACHE/vllm-prometheus}\"\n\n  mkdir -p \"$VLLM_MODELS_DIR\"\n  mkdir -p \"$PROMETHEUS_MULTIPROC_DIR\"\n\n  # ── Ensure vllm config has compilation disabled (nvcc not on PATH) ──\n  _vllm_config=\"$FLOX_ENV_CACHE/vllm-config.yaml\"\n  if [[ ! -f \"$_vllm_config\" ]]; then\n    cat > \"$_vllm_config\" <<'VLLM_YAML'\nhost: \"0.0.0.0\"\nport: 8000\n\ndtype: float16\ngpu-memory-utilization: 0.85\nquantization: awq\ncompilation-config: '{\"level\": 0}'\n\ndisable-log-requests: true\nuvicorn-log-level: \"warning\"\nVLLM_YAML\n  elif ! grep -q 'compilation-config' \"$_vllm_config\"; then\n    printf '\\ncompilation-config: '\\''{\"level\": 0}'\\''\\n' >> \"$_vllm_config\"\n  fi\n\n"
     },
     "options": {
       "systems": [
@@ -40,30 +39,9 @@
   },
   "packages": [
     {
-      "attr_path": "phi-4-mini-instruct-fp8-torchao",
-      "broken": false,
-      "derivation": "/nix/store/m7q4ppl7jy669207ij2j4lc9s9bnhxlr-phi-4-mini-instruct-fp8-torchao-1.0.0+ca88e16.drv",
-      "install_id": "phi-4-mini-instruct-fp8-torchao",
-      "locked_url": "git@github.com:barstoolbluz/build-hf-models.git?rev=70902c9cdf9029f1be85034baa157daeec9358e4",
-      "name": "phi-4-mini-instruct-fp8-torchao-1.0.0+ca88e16",
-      "pname": "phi-4-mini-instruct-fp8-torchao",
-      "rev": "70902c9cdf9029f1be85034baa157daeec9358e4",
-      "rev_count": 9,
-      "rev_date": "2026-03-19T17:10:49Z",
-      "scrape_date": "2026-03-19T17:17:52.061769907Z",
-      "stabilities": [
-        "unstable"
-      ],
-      "unfree": false,
-      "version": "1.0.0+ca88e16",
-      "outputs_to_install": [
-        "out"
-      ],
-      "outputs": {
-        "out": "/nix/store/kp48m094m8pgq2a1w4gjk40xp5gq604s-phi-4-mini-instruct-fp8-torchao-1.0.0+ca88e16"
-      },
+      "install_id": "phi-3-5-mini-instruct-awq",
+      "store_path": "/nix/store/106aab58dnblxmihxk9cccxvyg0b9ca4-phi-3.5-mini-instruct-awq-1.0.0+d6c46be",
       "system": "x86_64-linux",
-      "group": "phi-4-mini-instruct-fp8-torchao",
       "priority": 5
     },
     {
