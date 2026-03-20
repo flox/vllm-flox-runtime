@@ -2,6 +2,7 @@ schema-version = "1.10.0"
 
 [install]
 vllm-flox-runtime.pkg-path = "flox/vllm-flox-runtime"
+vllm-flox-runtime.version = "0.9.5+0af2747"
 vllm-flox-runtime.systems = ["x86_64-linux"]
 vllm-flox-runtime.pkg-group = "vllm-flox-runtime"
 vllm.pkg-path = "flox-cuda/python3Packages.vllm"
@@ -11,6 +12,12 @@ vllm.pkg-group = "vllm"
 vllm.outputs = "all"
 vllm-phi-3-5-mini-instruct-awq.pkg-path = "flox/vllm-phi-3-5-mini-instruct-awq"
 vllm-phi-3-5-mini-instruct-awq.pkg-group = "vllm-phi-3-5-mini-instruct-awq"
+curl.pkg-path = "curl"
+coreutils.pkg-path = "coreutils"
+gnutar.pkg-path = "gnutar"
+python3.pkg-path = "python3"
+gawk.pkg-path = "gawk"
+nvidia.pkg-path = "nvtopPackages.nvidia"
 
 
 [hook]
