@@ -80,7 +80,7 @@ vllm-preflight && vllm-resolve-model && vllm-serve
 │  ┌─────────────────────────────────────────────────┐ │
 │  │  vllm-preflight                                 │ │
 │  │    Port reclaim ← /proc/net/tcp + /proc/<pid>/  │ │
-│  │    GPU health   ← torch → nvidia-smi → skip     │ │
+│  │    GPU health   ← NVML → nvidia-smi → skip      │ │
 │  ├─────────────────────────────────────────────────┤ │
 │  │  vllm-resolve-model                             │ │
 │  │    Sources: flox → local → hf-cache → r2 → hub │ │
@@ -92,7 +92,7 @@ vllm-preflight && vllm-resolve-model && vllm-serve
 └──────────────────────────────────────────────────────┘
 ```
 
-1. **vllm-preflight** — Reclaims the port if occupied by a stale vLLM process, checks GPU health via torch or nvidia-smi, optionally executes a downstream command.
+1. **vllm-preflight** — Reclaims the port if occupied by a stale vLLM process, checks GPU health via NVML or nvidia-smi, optionally executes a downstream command.
 2. **vllm-resolve-model** — Provisions the model from configured sources with locking and atomic swaps, validates the model directory (config, tokenizer, weight shards), writes a per-model env file.
 3. **vllm-serve** — Loads the env file (safe or trusted mode), validates all required vars, builds the `vllm serve` argv from env vars + `config.yaml`, and `exec`s.
 
@@ -336,7 +336,7 @@ Stable contract — these codes are safe to match on programmatically.
 | `0` | Success | Port free (or reclaimed), GPU OK, downstream command exec'd |
 | `1` | Validation error | Bad env var value, GPU hard failure, bad config, `python3` not found |
 | `2` | Port owned by non-vLLM process | A non-vLLM listener holds the port. Will not kill |
-| `3` | Different UID | vLLM process on the port belongs to another user. Will not kill (unless `VLLM_ALLOW_KILL_OTHER_UID=1`) |
+| `3` | Different UID | vLLM process on the port belongs to another user. Will not kill (unless `VLLM_ALLOW_OTHER_UID_KILL=1`) |
 | `4` | Not attributable | Listener found but cannot map socket inodes to PIDs (permissions / hidepid) |
 | `5` | Stop failed | Sent SIGTERM/SIGKILL but port is still listening after timeout |
 
@@ -346,24 +346,28 @@ In `--dry-run` mode (`VLLM_DRY_RUN=1`), exit codes are `0`/`2`/`3`/`4` only (nev
 
 | Variable | Default | Validation | Description |
 |----------|---------|------------|-------------|
-| `VLLM_HOST` | `0.0.0.0` | — | Bind address to check |
+| `VLLM_HOST` | `0.0.0.0` | IP/hostname | Bind address to check |
 | `VLLM_PORT` | `8000` | Integer, 1-65535 | Port to check and reclaim |
-| `VLLM_OWNER_REGEX` | _(built-in heuristic)_ | Valid regex | Regex to identify vLLM owner processes. Matched against `/proc/<pid>/cmdline` and `/proc/<pid>/exe`. See example below |
 | `VLLM_DRY_RUN` | `0` | `0` or `1` | Report what would happen without sending signals |
-| `VLLM_GPU_WARN_PCT` | `50` | Numeric, 0-100 | Warn if GPU memory usage exceeds this percentage before vLLM starts |
 | `VLLM_SKIP_GPU_CHECK` | `0` | `0` or `1` | Skip all GPU checks |
-| `VLLM_REQUIRE_TORCH` | `0` | `0` or `1` | Fail (exit 1) if `import torch` fails. Default: fall through to nvidia-smi |
-| `VLLM_ALLOW_KILL_OTHER_UID` | `0` | `0` or `1` | Allow killing vLLM processes owned by other UIDs |
-| `VLLM_PREFLIGHT_LOCKFILE` | `/tmp/vllm-preflight.lock` | — | Lock file path. Checked for symlink and regular-file safety |
-| `VLLM_TERM_GRACE` | `3` | Numeric, >= 0 | Seconds to wait after SIGTERM before sending SIGKILL |
-| `VLLM_PORT_FREE_TIMEOUT` | `10` | Numeric, >= 0 | Seconds to wait for the port to become free after killing |
-| `VLLM_PORT_FREE_POLL` | `0.5` | Numeric, > 0 | Poll interval (seconds) while waiting for port to free |
-| `VLLM_PREFLIGHT_JSON` | `0` | `0` or `1` | Print a single JSON object on stdout. Incompatible with downstream command exec |
+| `VLLM_MIN_FREE_GPU_GB` | `4` | Numeric, >= 0 | Minimum free GPU memory (GiB). Hard-fails if `memory` in `VLLM_GPU_FAIL_ON` |
+| `VLLM_MAX_GPU_TEMP_C` | `85` | Integer, >= 1 | Hard-fail if GPU temperature exceeds this (Celsius) |
+| `VLLM_MAX_GPU_UTIL_PCT` | `95` | Integer, 0-100 | Hard-fail if GPU utilization exceeds this percentage |
+| `VLLM_GPU_FAIL_ON` | `temperature` | Comma-separated | Conditions that trigger hard failure: `temperature`, `memory`, `utilization` |
+| `VLLM_GPU_DEVICES` | _(unset)_ | CSV | GPU device indices/UUIDs to check. Falls back to `CUDA_VISIBLE_DEVICES` |
+| `VLLM_ALLOW_OTHER_UID_KILL` | `0` | `0` or `1` | Allow killing vLLM processes owned by other UIDs |
+| `VLLM_STOP_TIMEOUT` | `15` | Integer, >= 0 | Seconds for full stop cycle (SIGTERM → SIGKILL) |
+| `VLLM_PROCESS_SIGNATURES` | _(unset)_ | Comma-separated | Additional cmdline signatures to identify as vLLM processes |
+| `VLLM_PREFLIGHT_LOCKFILE` | `/tmp/vllm-preflight.{port}.lock` | File path | Lock file path. Port-keyed by default |
+| `VLLM_PREFLIGHT_JSON` | `0` | `0` or `1` | JSON output on stdout. Incompatible with downstream command |
+| `VLLM_PREFLIGHT_PROXY_CHILD` | `1` | `0` or `1` | Proxy mode: start child, wait for bind, forward signals. Set `0` for plain exec |
+| `VLLM_START_BIND_TIMEOUT` | `60` | Numeric, > 0 | Max seconds to wait for downstream to bind the target port (proxy mode) |
+| `VLLM_START_BIND_POLL` | `0.2` | Numeric, > 0 | Poll interval while waiting for downstream bind (proxy mode) |
 
-`VLLM_OWNER_REGEX` example for unusual launchers:
+`VLLM_PROCESS_SIGNATURES` example for unusual launchers:
 
 ```bash
-VLLM_OWNER_REGEX='vllm(\.entrypoints|.*serve)|openai\.api_server'
+VLLM_PROCESS_SIGNATURES='my.custom.launcher,another_entrypoint'
 ```
 
 ### Port reclaim behavior
@@ -371,22 +375,27 @@ VLLM_OWNER_REGEX='vllm(\.entrypoints|.*serve)|openai\.api_server'
 1. Parses `/proc/net/tcp` and `/proc/net/tcp6` for LISTEN-state sockets matching the configured host and port (including wildcard `0.0.0.0`/`::` catchall).
 2. Maps socket inodes to PIDs via `/proc/<pid>/fd/` symlink scanning.
 3. Reads `/proc/<pid>/cmdline` and `/proc/<pid>/exe` to classify each listener as vLLM or non-vLLM:
-   - **Built-in heuristic**: matches `vllm` in cmdline AND one of: `vllm.entrypoints`, `openai.api_server`, `entrypoints.openai`, or `serve` keywords; also accepts `python` in exe path.
-   - **Custom regex**: set `VLLM_OWNER_REGEX` for unusual launchers.
+   - **Built-in signatures**: `vllm.entrypoints.openai.api_server`, `vllm.entrypoints.api_server`, `vllm.entrypoints.openai.run_server`, `vllm serve`, `vllm.entrypoints`.
+   - **Custom signatures**: set `VLLM_PROCESS_SIGNATURES` for unusual launchers.
 4. **Non-vLLM listener** → exit 2 (refuses to kill).
-5. **Different UID** → exit 3 (unless `VLLM_ALLOW_KILL_OTHER_UID=1`).
+5. **Different UID** → exit 3 (unless `VLLM_ALLOW_OTHER_UID_KILL=1`).
 6. **Unmappable inodes** → exit 4 (e.g., hidepid restrictions).
-7. **Own vLLM** → builds process tree via `/proc/<pid>/stat` parent chain, sends SIGTERM to all descendants (post-order), waits `VLLM_TERM_GRACE` seconds, then SIGKILL any survivors.
-8. Polls until port is free or `VLLM_PORT_FREE_TIMEOUT` expires. If still listening → exit 5.
+7. **Own vLLM** → builds process tree via `/proc/<pid>/stat` parent chain, sends SIGTERM to all descendants (post-order), waits up to `VLLM_STOP_TIMEOUT` seconds (default 15), then SIGKILL any survivors.
+8. Polls until port is free or `VLLM_STOP_TIMEOUT` expires. If still listening → exit 5.
 
 ### GPU health check
 
-Runs after port reclaim. Cascade:
+Runs after port reclaim. Three-tier cascade:
 
-1. **torch available**: `import torch` → `torch.cuda.is_available()` → enumerate GPUs, report free/total VRAM, warn if usage > `VLLM_GPU_WARN_PCT`. Exit 1 if no CUDA GPUs.
-2. **torch unavailable + `VLLM_REQUIRE_TORCH=1`**: exit 1.
-3. **torch unavailable + nvidia-smi available**: query `nvidia-smi --query-gpu=name,memory.total,memory.free`. Warn if usage > threshold. If nvidia-smi fails, soft-skip with warning.
-4. **Neither torch nor nvidia-smi**: log warning, continue.
+1. **NVML** (preferred): ctypes probe of `libcuda.so.1` + `libnvidia-ml.so.1`. Per-GPU: name, memory, temperature, utilization, pstate, clock throttle reasons. Hard-fails if driver present but 0 devices.
+2. **nvidia-smi** (fallback): same fields via CSV output.
+3. **Neither available**: warning, continue.
+
+Threshold checks:
+
+- **Memory**: hard-fails if free < `VLLM_MIN_FREE_GPU_GB` and `memory` in `VLLM_GPU_FAIL_ON`.
+- **Temperature**: hard-fails if > `VLLM_MAX_GPU_TEMP_C` and `temperature` in `VLLM_GPU_FAIL_ON` (default: yes).
+- **Utilization**: hard-fails if > `VLLM_MAX_GPU_UTIL_PCT` and `utilization` in `VLLM_GPU_FAIL_ON`.
 
 ### JSON output mode
 
@@ -395,9 +404,8 @@ When `VLLM_PREFLIGHT_JSON=1`, a single JSON object is printed to stdout. Human-r
 Examples:
 
 ```json
-{"status":"ok","action":"noop","dry_run":false}
-{"status":"ok","action":"stopped","dry_run":false,"pids":[12345,12346]}
-{"status":"ok","action":"would_stop","dry_run":true,"pids":[12345]}
+{"ok":true,"host":"0.0.0.0","port":8000,"port_action":"noop","reclaimed_roots":[],"blocked_roots":[],"could_scan":true,"gpus":[],"gpu_check_source":"skipped"}
+{"ok":true,"host":"0.0.0.0","port":8000,"port_action":"stopped","reclaimed_roots":[12345],"blocked_roots":[],"could_scan":true,"gpus":[...],"gpu_check_source":"nvml"}
 ```
 
 ### Locking
@@ -718,7 +726,7 @@ VLLM_PORT=8001 flox activate --start-services
 Another user's vLLM process holds the port. Either ask them to stop it, or:
 
 ```bash
-VLLM_ALLOW_KILL_OTHER_UID=1 flox activate --start-services
+VLLM_ALLOW_OTHER_UID_KILL=1 flox activate --start-services
 ```
 
 ### Inode not attributable (exit code 4)
@@ -730,7 +738,7 @@ Your system restricts `/proc/<pid>/fd` visibility (hidepid mount option). Run as
 The port is still listening after SIGTERM + SIGKILL + timeout. Increase the timeout or investigate manually:
 
 ```bash
-VLLM_PORT_FREE_TIMEOUT=30 VLLM_TERM_GRACE=10 flox activate --start-services
+VLLM_STOP_TIMEOUT=30 flox activate --start-services
 ```
 
 ### GPU not detected
@@ -774,7 +782,7 @@ If a previous run was killed mid-operation, the lock file may be stale:
 
 ```bash
 # For vllm-preflight
-rm -f /tmp/vllm-preflight.lock
+rm -f /tmp/vllm-preflight.*.lock
 
 # For vllm-resolve-model (lockfile is next to the env file)
 rm -f "$FLOX_ENV_CACHE"/vllm-model.*.lock
