@@ -8,10 +8,10 @@ vllm.version = "0.15.1"
 vllm.pkg-group = "vllm"
 vllm.outputs = "all"
 
-# flox vllm runtime scripts
+# flox vllm runtime scripts (store-path pin for testing)
 vllm-flox-runtime.pkg-path = "flox/vllm-flox-runtime"
 vllm-flox-runtime.pkg-group = "vllm-flox-runtime"
-vllm-flox-runtime.version = "0.9.6+e992d0e"
+vllm-flox-runtime.version = "0.9.7+54716d4"
 
 # model served from the nix store
 vllm-phi-3-5-mini-instruct-awq.pkg-path = "flox/vllm-phi-3-5-mini-instruct-awq"

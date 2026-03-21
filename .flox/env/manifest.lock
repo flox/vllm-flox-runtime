@@ -30,7 +30,7 @@
       "vllm-flox-runtime": {
         "pkg-path": "flox/vllm-flox-runtime",
         "pkg-group": "vllm-flox-runtime",
-        "version": "0.9.6+e992d0e"
+        "version": "0.9.7+54716d4"
       },
       "vllm-phi-3-5-mini-instruct-awq": {
         "pkg-path": "flox/vllm-phi-3-5-mini-instruct-awq",
@@ -38,7 +38,7 @@
       }
     },
     "hook": {
-      "on-activate": "  # Model\n  export VLLM_MODEL=\"${VLLM_MODEL:-Phi-3.5-mini-instruct-AWQ}\"\n  export VLLM_MODEL_ORG=\"${VLLM_MODEL_ORG:-microsoft}\"\n  export VLLM_MODEL_SOURCES=\"${VLLM_MODEL_SOURCES:-flox,local,hf-cache,hf-hub}\"\n  export VLLM_MODELS_DIR=\"${VLLM_MODELS_DIR:-$FLOX_ENV_PROJECT/models}\"\n  export VLLM_SERVED_MODEL_NAME=\"${VLLM_SERVED_MODEL_NAME:-Phi-3.5-mini-instruct}\"\n\n  # Server\n  export VLLM_HOST=\"${VLLM_HOST:-0.0.0.0}\"\n  export VLLM_PORT=\"${VLLM_PORT:-8000}\"\n  export VLLM_API_KEY=\"${VLLM_API_KEY:-sk-vllm-local-dev}\"\n\n  # Engine tuning\n  export VLLM_TENSOR_PARALLEL_SIZE=\"${VLLM_TENSOR_PARALLEL_SIZE:-1}\"\n  export VLLM_PIPELINE_PARALLEL_SIZE=\"${VLLM_PIPELINE_PARALLEL_SIZE:-1}\"\n  export VLLM_PREFIX_CACHING=\"${VLLM_PREFIX_CACHING:-false}\"\n  export VLLM_KV_CACHE_DTYPE=\"${VLLM_KV_CACHE_DTYPE:-auto}\"\n  export VLLM_MAX_MODEL_LEN=\"${VLLM_MAX_MODEL_LEN:-4096}\"\n  export VLLM_MAX_NUM_BATCHED_TOKENS=\"${VLLM_MAX_NUM_BATCHED_TOKENS:-4096}\"\n  export VLLM_MAX_TOKENS=\"${VLLM_MAX_TOKENS:-1024}\"\n\n  # Logging / metrics\n  export VLLM_LOGGING_LEVEL=\"${VLLM_LOGGING_LEVEL:-WARNING}\"\n  export PROMETHEUS_MULTIPROC_DIR=\"${PROMETHEUS_MULTIPROC_DIR:-$FLOX_ENV_CACHE/vllm-prometheus}\"\n\n  mkdir -p \"$VLLM_MODELS_DIR\"\n  mkdir -p \"$PROMETHEUS_MULTIPROC_DIR\"\n\n  # ── Ensure vllm config has compilation disabled (nvcc not on PATH) ──\n  _vllm_config=\"$FLOX_ENV_CACHE/vllm-config.yaml\"\n  if [[ ! -f \"$_vllm_config\" ]]; then\n    cat > \"$_vllm_config\" <<'VLLM_YAML'\nhost: \"0.0.0.0\"\nport: 8000\n\ndtype: float16\ngpu-memory-utilization: 0.85\nquantization: awq\ncompilation-config: '{\"level\": 0}'\n\ndisable-log-requests: true\nuvicorn-log-level: \"warning\"\nVLLM_YAML\n  elif ! grep -q 'compilation-config' \"$_vllm_config\"; then\n    printf '\\ncompilation-config: '\\''{\"level\": 0}'\\''\\n' >> \"$_vllm_config\"\n  fi\n\n"
+      "on-activate": "  # Model\n  export VLLM_MODEL=\"${VLLM_MODEL:-Phi-3.5-mini-instruct-AWQ}\"\n  export VLLM_MODEL_ORG=\"${VLLM_MODEL_ORG:-microsoft}\"\n  export VLLM_MODEL_SOURCES=\"${VLLM_MODEL_SOURCES:-flox,local,hf-cache,hf-hub}\"\n  export VLLM_MODELS_DIR=\"${VLLM_MODELS_DIR:-$FLOX_ENV_PROJECT/models}\"\n  export VLLM_SERVED_MODEL_NAME=\"${VLLM_SERVED_MODEL_NAME:-Phi-3.5-mini-instruct}\"\n\n  # Server\n  export VLLM_HOST=\"${VLLM_HOST:-0.0.0.0}\"\n  export VLLM_PORT=\"${VLLM_PORT:-8000}\"\n  export VLLM_API_KEY=\"${VLLM_API_KEY:-sk-vllm-local-dev}\"\n\n  # Engine tuning\n  export VLLM_TENSOR_PARALLEL_SIZE=\"${VLLM_TENSOR_PARALLEL_SIZE:-1}\"\n  export VLLM_PIPELINE_PARALLEL_SIZE=\"${VLLM_PIPELINE_PARALLEL_SIZE:-1}\"\n  export VLLM_PREFIX_CACHING=\"${VLLM_PREFIX_CACHING:-false}\"\n  export VLLM_KV_CACHE_DTYPE=\"${VLLM_KV_CACHE_DTYPE:-auto}\"\n  export VLLM_MAX_MODEL_LEN=\"${VLLM_MAX_MODEL_LEN:-4096}\"\n  export VLLM_MAX_NUM_BATCHED_TOKENS=\"${VLLM_MAX_NUM_BATCHED_TOKENS:-4096}\"\n  export VLLM_MAX_TOKENS=\"${VLLM_MAX_TOKENS:-1024}\"\n\n  # Logging / metrics\n  export VLLM_LOGGING_LEVEL=\"${VLLM_LOGGING_LEVEL:-WARNING}\"\n  export PROMETHEUS_MULTIPROC_DIR=\"${PROMETHEUS_MULTIPROC_DIR:-$FLOX_ENV_CACHE/vllm-prometheus}\"\n\n  # ── Reset vLLM cache if requested ──\n  if [[ \"${VLLM_RESET_CACHE:-0}\" == \"1\" ]]; then\n    echo \"VLLM_RESET_CACHE=1: removing vLLM cached files from $FLOX_ENV_CACHE\"\n    rm -f \"$FLOX_ENV_CACHE\"/vllm-config.yaml\n    rm -f \"$FLOX_ENV_CACHE\"/vllm-config.active.yaml\n    rm -f \"$FLOX_ENV_CACHE\"/vllm-model.*.env\n    rm -rf \"$FLOX_ENV_CACHE\"/vllm-prometheus\n    unset VLLM_RESET_CACHE\n  fi\n\n  mkdir -p \"$VLLM_MODELS_DIR\"\n  mkdir -p \"$PROMETHEUS_MULTIPROC_DIR\"\n\n  # ── Ensure vllm config has compilation disabled (nvcc not on PATH) ──\n  _vllm_config=\"$FLOX_ENV_CACHE/vllm-config.yaml\"\n  if [[ ! -f \"$_vllm_config\" ]]; then\n    cat > \"$_vllm_config\" <<'VLLM_YAML'\nhost: \"0.0.0.0\"\nport: 8000\n\ndtype: float16\ngpu-memory-utilization: 0.85\nquantization: awq\ncompilation-config: '{\"mode\": 0}'\n\nuvicorn-log-level: \"warning\"\nVLLM_YAML\n  elif ! grep -q 'compilation-config' \"$_vllm_config\"; then\n    printf '\\ncompilation-config: '\\''{\"mode\": 0}'\\''\\n' >> \"$_vllm_config\"\n  fi\n\n"
     },
     "options": {
       "systems": [
@@ -253,36 +253,6 @@
       "priority": 5
     },
     {
-      "attr_path": "vllm-flox-runtime",
-      "broken": false,
-      "derivation": "/nix/store/4l2sjdjxlwzh7xch6mqzi0ax5y012n0x-vllm-flox-runtime-0.9.6+e992d0e.drv",
-      "description": "Runtime scripts for vLLM model serving with Flox",
-      "install_id": "vllm-flox-runtime",
-      "locked_url": "git@github.com:flox/package-vllm-runtime.git?rev=e5fde28821ddc03a93e617a5df15d2927fe5dc7b",
-      "name": "vllm-flox-runtime-0.9.6+e992d0e",
-      "pname": "vllm-flox-runtime",
-      "rev": "e5fde28821ddc03a93e617a5df15d2927fe5dc7b",
-      "rev_count": 24,
-      "rev_date": "2026-03-21T13:38:16Z",
-      "scrape_date": "2026-03-21T13:47:08.498969888Z",
-      "stabilities": [
-        "staging",
-        "unstable",
-        "stable"
-      ],
-      "unfree": false,
-      "version": "0.9.6+e992d0e",
-      "outputs_to_install": [
-        "out"
-      ],
-      "outputs": {
-        "out": "/nix/store/q9lzaqb8ng710h02rnfl4pxn215xircf-vllm-flox-runtime-0.9.6+e992d0e"
-      },
-      "system": "x86_64-linux",
-      "group": "vllm-flox-runtime",
-      "priority": 5
-    },
-    {
       "attr_path": "vllm-phi-3-5-mini-instruct-awq",
       "broken": false,
       "derivation": "/nix/store/cjyv77cbmdjlwchnq0hnvn9q094yz5sn-vllm-phi-3.5-mini-instruct-awq-1.0.1+d6c46be.drv",
@@ -307,6 +277,36 @@
       },
       "system": "x86_64-linux",
       "group": "vllm-phi-3-5-mini-instruct-awq",
+      "priority": 5
+    },
+    {
+      "attr_path": "vllm-flox-runtime",
+      "broken": false,
+      "derivation": "/nix/store/22azi5n7mjnvfkn84rwwjrb525g7v0h4-vllm-flox-runtime-0.9.7+54716d4.drv",
+      "description": "Runtime scripts for vLLM model serving with Flox",
+      "install_id": "vllm-flox-runtime",
+      "locked_url": "git@github.com:flox/package-vllm-runtime.git?rev=a89df432f8b78f1dbab09d528f015523136ea8a5",
+      "name": "vllm-flox-runtime-0.9.7+54716d4",
+      "pname": "vllm-flox-runtime",
+      "rev": "a89df432f8b78f1dbab09d528f015523136ea8a5",
+      "rev_count": 29,
+      "rev_date": "2026-03-21T14:21:47Z",
+      "scrape_date": "2026-03-21T14:23:39.069628417Z",
+      "stabilities": [
+        "staging",
+        "unstable",
+        "stable"
+      ],
+      "unfree": false,
+      "version": "0.9.7+54716d4",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/kh7livw9x40pip1pd0rids7601idb78a-vllm-flox-runtime-0.9.7+54716d4"
+      },
+      "system": "x86_64-linux",
+      "group": "vllm-flox-runtime",
       "priority": 5
     }
   ]
