@@ -506,7 +506,7 @@ The env var to vLLM CLI flag mapping:
 | `VLLM_KV_CACHE_DTYPE` | `--kv-cache-dtype` |
 | `VLLM_MAX_MODEL_LEN` | `--max-model-len` |
 | `VLLM_MAX_NUM_BATCHED_TOKENS` | `--max-num-batched-tokens` |
-| `VLLM_MAX_TOKENS` | injected into config file (`max-tokens:`) |
+| `VLLM_MAX_TOKENS` | `--override-generation-config '{"max_new_tokens": N}'` |
 | `VLLM_SERVED_MODEL_NAME` | `--served-model-name` |
 | `VLLM_PREFIX_CACHING` | `--enable-prefix-caching` (when truthy) |
 
