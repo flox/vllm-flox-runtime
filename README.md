@@ -490,7 +490,6 @@ vllm serve <_VLLM_RESOLVED_MODEL> \
   --kv-cache-dtype <VLLM_KV_CACHE_DTYPE> \
   --max-model-len <VLLM_MAX_MODEL_LEN> \
   --max-num-batched-tokens <VLLM_MAX_NUM_BATCHED_TOKENS> \
-  --max-tokens <VLLM_MAX_TOKENS> \
   --served-model-name <VLLM_SERVED_MODEL_NAME> \
   [--enable-prefix-caching]    # when VLLM_PREFIX_CACHING is true/1/yes
   [extra args...]              # anything after -- on the vllm-serve command line
@@ -507,7 +506,7 @@ The env var to vLLM CLI flag mapping:
 | `VLLM_KV_CACHE_DTYPE` | `--kv-cache-dtype` |
 | `VLLM_MAX_MODEL_LEN` | `--max-model-len` |
 | `VLLM_MAX_NUM_BATCHED_TOKENS` | `--max-num-batched-tokens` |
-| `VLLM_MAX_TOKENS` | `--max-tokens` |
+| `VLLM_MAX_TOKENS` | injected into config file (`max-tokens:`) |
 | `VLLM_SERVED_MODEL_NAME` | `--served-model-name` |
 | `VLLM_PREFIX_CACHING` | `--enable-prefix-caching` (when truthy) |
 
