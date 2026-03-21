@@ -3,6 +3,15 @@
   "manifest": {
     "schema-version": "1.10.0",
     "install": {
+      "coreutils": {
+        "pkg-path": "coreutils"
+      },
+      "gawk": {
+        "pkg-path": "gawk"
+      },
+      "gnutar": {
+        "pkg-path": "gnutar"
+      },
       "vllm": {
         "pkg-path": "flox-cuda/python3Packages.vllm",
         "pkg-group": "vllm",
@@ -40,6 +49,106 @@
   },
   "packages": [
     {
+      "attr_path": "coreutils",
+      "broken": false,
+      "derivation": "/nix/store/bl552s9nw613lkzc4rmw3svpdwp1ib68-coreutils-9.10.drv",
+      "description": "GNU Core Utilities",
+      "install_id": "coreutils",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b40629efe5d6ec48dd1efba650c797ddbd39ace0",
+      "name": "coreutils-9.10",
+      "pname": "coreutils",
+      "rev": "b40629efe5d6ec48dd1efba650c797ddbd39ace0",
+      "rev_count": 964859,
+      "rev_date": "2026-03-18T08:17:15Z",
+      "scrape_date": "2026-03-20T02:16:25.006863Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "9.10",
+      "outputs_to_install": [
+        "out",
+        "out",
+        "out",
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "debug": "/nix/store/8mcpc2yx37lqpp3id4966iarglcb7z42-coreutils-9.10-debug",
+        "info": "/nix/store/m4v3w2kchwa6wkv1sdnqqji096byxxkp-coreutils-9.10-info",
+        "out": "/nix/store/hlxw2q9qansq7bn52xvlb5badw3z1v8s-coreutils-9.10"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "gawk",
+      "broken": false,
+      "derivation": "/nix/store/aihn2bgjx2cawvqbkqx5gvs3936savij-gawk-5.3.2.drv",
+      "description": "GNU implementation of the Awk programming language",
+      "install_id": "gawk",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b40629efe5d6ec48dd1efba650c797ddbd39ace0",
+      "name": "gawk-5.3.2",
+      "pname": "gawk",
+      "rev": "b40629efe5d6ec48dd1efba650c797ddbd39ace0",
+      "rev_count": 964859,
+      "rev_date": "2026-03-18T08:17:15Z",
+      "scrape_date": "2026-03-20T02:16:26.333925Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "5.3.2",
+      "outputs_to_install": [
+        "man",
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "info": "/nix/store/9p12f1sij4w65j35ssikl7zvlnh8kd2f-gawk-5.3.2-info",
+        "man": "/nix/store/c1gd6m4r3wa9ydvdg1xqvdkbsksmsp67-gawk-5.3.2-man",
+        "out": "/nix/store/gf7b4yz4vhd0y2hnnrimhh875ghwzzzj-gawk-5.3.2"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "gnutar",
+      "broken": false,
+      "derivation": "/nix/store/8ivyhxjb6q1vw9rasqlcp3m79k6p018h-gnutar-1.35.drv",
+      "description": "GNU implementation of the `tar' archiver",
+      "install_id": "gnutar",
+      "license": "GPL-3.0-or-later",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=b40629efe5d6ec48dd1efba650c797ddbd39ace0",
+      "name": "gnutar-1.35",
+      "pname": "gnutar",
+      "rev": "b40629efe5d6ec48dd1efba650c797ddbd39ace0",
+      "rev_count": 964859,
+      "rev_date": "2026-03-18T08:17:15Z",
+      "scrape_date": "2026-03-20T02:16:27.240446Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.35",
+      "outputs_to_install": [
+        "out",
+        "out",
+        "out"
+      ],
+      "outputs": {
+        "info": "/nix/store/6kfl4c99k3i2cz1pkix04786w0983hsy-gnutar-1.35-info",
+        "out": "/nix/store/isva9q9zx3frx6hh6cnpihh1kd2bx6bk-gnutar-1.35"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
       "attr_path": "python3Packages.vllm",
       "broken": false,
       "derivation": "/nix/store/2148pqyg9vbv408rg8wbwdahlqz814hj-python3.13-vllm-0.15.1.drv",
@@ -52,7 +161,7 @@
       "rev": "9dcb002ca1690658be4a04645215baea8b95f31d",
       "rev_count": 960399,
       "rev_date": "2026-03-08T09:52:19Z",
-      "scrape_date": "2026-03-16T00:43:26.691133953Z",
+      "scrape_date": "2026-03-21T01:15:28.362278960Z",
       "stabilities": [
         "unstable"
       ],
@@ -72,28 +181,28 @@
     {
       "attr_path": "vllm-flox-runtime",
       "broken": false,
-      "derivation": "/nix/store/wngm4c4dnssm22b3bakknbk50y5kkfl3-vllm-flox-runtime-0.9.5.drv",
+      "derivation": "/nix/store/4s6km2013sgm880dzbhlp93z2mqi3d73-vllm-flox-runtime-0.9.5+b15ab16.drv",
       "description": "Runtime scripts for vLLM model serving with Flox",
       "install_id": "vllm-flox-runtime",
-      "locked_url": "git@github.com:barstoolbluz/build-vllm-flox-runtime.git?rev=f9edcd88431b81d82958cc0775e1e4fb275aab83",
-      "name": "vllm-flox-runtime-0.9.5",
+      "locked_url": "git@github.com:flox/package-vllm-runtime.git?rev=af139fbb16e31d9a01f6a8f9cded271cc17275c7",
+      "name": "vllm-flox-runtime-0.9.5+b15ab16",
       "pname": "vllm-flox-runtime",
-      "rev": "f9edcd88431b81d82958cc0775e1e4fb275aab83",
-      "rev_count": 12,
-      "rev_date": "2026-03-14T16:07:32Z",
-      "scrape_date": "2026-03-16T00:43:26.691138771Z",
+      "rev": "af139fbb16e31d9a01f6a8f9cded271cc17275c7",
+      "rev_count": 19,
+      "rev_date": "2026-03-21T01:11:51Z",
+      "scrape_date": "2026-03-21T01:15:28.362282115Z",
       "stabilities": [
         "unstable",
         "staging",
         "stable"
       ],
       "unfree": false,
-      "version": "0.9.5",
+      "version": "0.9.5+b15ab16",
       "outputs_to_install": [
         "out"
       ],
       "outputs": {
-        "out": "/nix/store/8x73x8saa2c4f9zps4q2jvdjbjacv1hc-vllm-flox-runtime-0.9.5"
+        "out": "/nix/store/mjpkbjcq8s3s428g420056yw0sy1ygw6-vllm-flox-runtime-0.9.5+b15ab16"
       },
       "system": "x86_64-linux",
       "group": "vllm-flox-runtime",
@@ -110,7 +219,7 @@
       "rev": "fa2ef3e6e5fbe95bf0acb8a597b2057a6d0b0685",
       "rev_count": 15,
       "rev_date": "2026-03-19T22:15:33Z",
-      "scrape_date": "2026-03-19T22:37:15.463542981Z",
+      "scrape_date": "2026-03-21T01:15:28.362285180Z",
       "stabilities": [
         "unstable"
       ],

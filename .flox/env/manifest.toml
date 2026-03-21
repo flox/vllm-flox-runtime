@@ -11,6 +11,9 @@ vllm.pkg-group = "vllm"
 vllm.outputs = "all"
 vllm-phi-3-5-mini-instruct-awq.pkg-path = "flox/vllm-phi-3-5-mini-instruct-awq"
 vllm-phi-3-5-mini-instruct-awq.pkg-group = "vllm-phi-3-5-mini-instruct-awq"
+coreutils.pkg-path = "coreutils"
+gnutar.pkg-path = "gnutar"
+gawk.pkg-path = "gawk"
 
 
 [hook]
