@@ -160,7 +160,7 @@ Settings are split between a static config file and runtime environment variable
 
 ### Static settings (`vllm-config.yaml`)
 
-A default config is bundled in the `vllm-flox-runtime` package and auto-copied to `$FLOX_ENV_CACHE/vllm-config.yaml` on first run. Edit that copy to customize. These settings are read by `vllm-serve` and passed directly to `vllm serve` via `--config`. `host` and `port` are overridden by the `VLLM_HOST`/`VLLM_PORT` env vars (passed as CLI args, which take precedence over config file values).
+A default config is bundled in the `vllm-flox-runtime` package and auto-copied to `$FLOX_ENV_CACHE/vllm-config.yaml` on first run. Edit that copy to customize. These settings are read by `vllm-serve` and passed directly to `vllm serve` via `--config`. `host` and `port` are read from this config file; edit the copy in `$FLOX_ENV_CACHE` to change them.
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
@@ -208,6 +208,7 @@ VLLM_MAX_MODEL_LEN=16384 VLLM_KV_CACHE_DTYPE=fp8 flox activate --start-services
 | `VLLM_KV_CACHE_DTYPE` | `auto` | KV cache precision. `auto` matches model dtype; `fp8` halves KV cache memory at minor quality cost. Must not contain whitespace |
 | `VLLM_MAX_MODEL_LEN` | `4096` | Max sequence length (input + output tokens). Must not exceed the model's native context length. Lower values reduce memory. Must be > 0 |
 | `VLLM_MAX_NUM_BATCHED_TOKENS` | `4096` | Chunked prefill budget. Increase for throughput at the cost of higher per-request latency. Must be > 0 |
+| `VLLM_MAX_TOKENS` | `1024` | Max completion tokens per request. Caps `max_tokens` from client requests. Must be > 0 |
 
 #### Logging and metrics
 
@@ -436,13 +437,12 @@ vllm-serve -- --extra-flag val       # pass extra args through to vllm serve
 | Variable | Validation | Description |
 |----------|------------|-------------|
 | `FLOX_ENV_CACHE` | Must be a directory | Cache directory (for default `vllm-config.yaml`). Not required if `VLLM_CONFIG_FILE` is set |
-| `VLLM_HOST` | Non-empty | Server bind address |
-| `VLLM_PORT` | Positive integer | Server listen port |
 | `VLLM_TENSOR_PARALLEL_SIZE` | Positive integer | Tensor parallelism GPU count |
 | `VLLM_PIPELINE_PARALLEL_SIZE` | Positive integer | Pipeline parallelism GPU count |
 | `VLLM_KV_CACHE_DTYPE` | Non-empty, no whitespace | KV cache dtype (e.g., `auto`, `fp8`) |
 | `VLLM_MAX_MODEL_LEN` | Positive integer | Max sequence length |
 | `VLLM_MAX_NUM_BATCHED_TOKENS` | Positive integer | Chunked prefill budget |
+| `VLLM_MAX_TOKENS` | Positive integer | Max completion tokens per request |
 | `VLLM_SERVED_MODEL_NAME` | Non-empty | Model name for API responses |
 
 **Required when `VLLM_MODEL_ENV_FILE` is not set** (the standard case):
@@ -485,13 +485,12 @@ The env file must define `_VLLM_RESOLVED_MODEL` or `vllm-serve` exits with an er
 ```bash
 vllm serve <_VLLM_RESOLVED_MODEL> \
   --config <config_file> \
-  --host <VLLM_HOST> \
-  --port <VLLM_PORT> \
   --tensor-parallel-size <VLLM_TENSOR_PARALLEL_SIZE> \
   --pipeline-parallel-size <VLLM_PIPELINE_PARALLEL_SIZE> \
   --kv-cache-dtype <VLLM_KV_CACHE_DTYPE> \
   --max-model-len <VLLM_MAX_MODEL_LEN> \
   --max-num-batched-tokens <VLLM_MAX_NUM_BATCHED_TOKENS> \
+  --max-tokens <VLLM_MAX_TOKENS> \
   --served-model-name <VLLM_SERVED_MODEL_NAME> \
   [--enable-prefix-caching]    # when VLLM_PREFIX_CACHING is true/1/yes
   [extra args...]              # anything after -- on the vllm-serve command line
@@ -503,13 +502,12 @@ The env var to vLLM CLI flag mapping:
 |---------|----------|
 | `_VLLM_RESOLVED_MODEL` | positional (model argument) |
 | `VLLM_CONFIG_FILE` or `$FLOX_ENV_CACHE/vllm-config.yaml` | `--config` |
-| `VLLM_HOST` | `--host` |
-| `VLLM_PORT` | `--port` |
 | `VLLM_TENSOR_PARALLEL_SIZE` | `--tensor-parallel-size` |
 | `VLLM_PIPELINE_PARALLEL_SIZE` | `--pipeline-parallel-size` |
 | `VLLM_KV_CACHE_DTYPE` | `--kv-cache-dtype` |
 | `VLLM_MAX_MODEL_LEN` | `--max-model-len` |
 | `VLLM_MAX_NUM_BATCHED_TOKENS` | `--max-num-batched-tokens` |
+| `VLLM_MAX_TOKENS` | `--max-tokens` |
 | `VLLM_SERVED_MODEL_NAME` | `--served-model-name` |
 | `VLLM_PREFIX_CACHING` | `--enable-prefix-caching` (when truthy) |
 
