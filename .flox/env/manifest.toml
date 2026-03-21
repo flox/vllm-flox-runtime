@@ -52,6 +52,16 @@ on-activate = '''
   export VLLM_LOGGING_LEVEL="${VLLM_LOGGING_LEVEL:-WARNING}"
   export PROMETHEUS_MULTIPROC_DIR="${PROMETHEUS_MULTIPROC_DIR:-$FLOX_ENV_CACHE/vllm-prometheus}"
 
+  # ── Reset vLLM cache if requested ──
+  if [[ "${VLLM_RESET_CACHE:-0}" == "1" ]]; then
+    echo "VLLM_RESET_CACHE=1: removing vLLM cached files from $FLOX_ENV_CACHE"
+    rm -f "$FLOX_ENV_CACHE"/vllm-config.yaml
+    rm -f "$FLOX_ENV_CACHE"/vllm-config.active.yaml
+    rm -f "$FLOX_ENV_CACHE"/vllm-model.*.env
+    rm -rf "$FLOX_ENV_CACHE"/vllm-prometheus
+    unset VLLM_RESET_CACHE
+  fi
+
   mkdir -p "$VLLM_MODELS_DIR"
   mkdir -p "$PROMETHEUS_MULTIPROC_DIR"
 
@@ -65,13 +75,12 @@ port: 8000
 dtype: float16
 gpu-memory-utilization: 0.85
 quantization: awq
-compilation-config: '{"level": 0}'
+compilation-config: '{"mode": 0}'
 
-disable-log-requests: true
 uvicorn-log-level: "warning"
 VLLM_YAML
   elif ! grep -q 'compilation-config' "$_vllm_config"; then
-    printf '\ncompilation-config: '\''{"level": 0}'\''\n' >> "$_vllm_config"
+    printf '\ncompilation-config: '\''{"mode": 0}'\''\n' >> "$_vllm_config"
   fi
 
 '''
