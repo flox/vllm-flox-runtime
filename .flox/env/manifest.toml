@@ -66,21 +66,26 @@ on-activate = '''
   mkdir -p "$PROMETHEUS_MULTIPROC_DIR"
 
   # ── Ensure vllm config has compilation disabled (nvcc not on PATH) ──
+  # mode 0 = NO_COMPILATION (disables torch.compile/inductor which need nvcc).
+  # cudagraph_mode FULL_DECODE_ONLY = capture decode phase as CUDA graphs (no
+  # nvcc needed; reduces kernel-launch overhead). FULL is not supported by
+  # FlashAttention backend — vLLM auto-downgrades, so we set this directly.
+  _vllm_compilation='{"mode": 0, "cudagraph_mode": "FULL_DECODE_ONLY"}'
   _vllm_config="$FLOX_ENV_CACHE/vllm-config.yaml"
   if [[ ! -f "$_vllm_config" ]]; then
-    cat > "$_vllm_config" <<'VLLM_YAML'
+    cat > "$_vllm_config" <<VLLM_YAML
 host: "0.0.0.0"
 port: 8000
 
 dtype: float16
 gpu-memory-utilization: 0.85
 quantization: awq
-compilation-config: '{"mode": 0}'
+compilation-config: '$_vllm_compilation'
 
 uvicorn-log-level: "warning"
 VLLM_YAML
   elif ! grep -q 'compilation-config' "$_vllm_config"; then
-    printf '\ncompilation-config: '\''{"mode": 0}'\''\n' >> "$_vllm_config"
+    printf '\ncompilation-config: '\''%s'\''\n' "$_vllm_compilation" >> "$_vllm_config"
   fi
 
 '''

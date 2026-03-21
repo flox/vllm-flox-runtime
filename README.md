@@ -169,7 +169,6 @@ A default config is bundled in the `vllm-flox-runtime` package and auto-copied t
 | `dtype` | `float16` | Weight data type. Use `float16` for AWQ-quantized models; `auto` selects BF16 for BF16 models, FP16 for FP16/FP32 models |
 | `gpu-memory-utilization` | `0.85` | Per-GPU VRAM fraction for KV cache. Reduce if you see OOM during prefill. Increase for cards with more headroom (e.g., 0.92 for 24 GB, 0.95 for 48 GB+) |
 | `quantization` | `awq` | Quantization method. Set to match the model's quantization (e.g., `awq`, `gptq`). Remove for unquantized models |
-| `disable-log-requests` | `true` | Suppress per-request logging |
 | `uvicorn-log-level` | `warning` | Uvicorn server log level |
 
 ### Runtime environment variables (on-activate hook)
@@ -825,6 +824,10 @@ vllm-serve --dry-run     # print the argv and exit without running
 ```bash
 VLLM_LOGGING_LEVEL=DEBUG flox activate --start-services
 ```
+
+### "Casting torch.bfloat16 to torch.float16"
+
+This warning is expected with the shipped model. The base Phi-3.5-mini natively uses bfloat16, but the AWQ-quantized variant (`Phi-3.5-mini-instruct-AWQ`) was re-quantized to float16 to ensure compatibility with the widest range of CUDA hardware — not all GPUs support bfloat16 natively (e.g., Tesla T4 / sm75). The static config sets `dtype: float16` to match the quantized weights, so vLLM logs the cast from the model's declared bfloat16 to the requested float16. This is harmless and correct for AWQ models.
 
 ## File structure
 

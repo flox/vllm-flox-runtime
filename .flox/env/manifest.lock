@@ -38,7 +38,7 @@
       }
     },
     "hook": {
-      "on-activate": "  # Model\n  export VLLM_MODEL=\"${VLLM_MODEL:-Phi-3.5-mini-instruct-AWQ}\"\n  export VLLM_MODEL_ORG=\"${VLLM_MODEL_ORG:-microsoft}\"\n  export VLLM_MODEL_SOURCES=\"${VLLM_MODEL_SOURCES:-flox,local,hf-cache,hf-hub}\"\n  export VLLM_MODELS_DIR=\"${VLLM_MODELS_DIR:-$FLOX_ENV_PROJECT/models}\"\n  export VLLM_SERVED_MODEL_NAME=\"${VLLM_SERVED_MODEL_NAME:-Phi-3.5-mini-instruct}\"\n\n  # Server\n  export VLLM_HOST=\"${VLLM_HOST:-0.0.0.0}\"\n  export VLLM_PORT=\"${VLLM_PORT:-8000}\"\n  export VLLM_API_KEY=\"${VLLM_API_KEY:-sk-vllm-local-dev}\"\n\n  # Engine tuning\n  export VLLM_TENSOR_PARALLEL_SIZE=\"${VLLM_TENSOR_PARALLEL_SIZE:-1}\"\n  export VLLM_PIPELINE_PARALLEL_SIZE=\"${VLLM_PIPELINE_PARALLEL_SIZE:-1}\"\n  export VLLM_PREFIX_CACHING=\"${VLLM_PREFIX_CACHING:-false}\"\n  export VLLM_KV_CACHE_DTYPE=\"${VLLM_KV_CACHE_DTYPE:-auto}\"\n  export VLLM_MAX_MODEL_LEN=\"${VLLM_MAX_MODEL_LEN:-4096}\"\n  export VLLM_MAX_NUM_BATCHED_TOKENS=\"${VLLM_MAX_NUM_BATCHED_TOKENS:-4096}\"\n  export VLLM_MAX_TOKENS=\"${VLLM_MAX_TOKENS:-1024}\"\n\n  # Logging / metrics\n  export VLLM_LOGGING_LEVEL=\"${VLLM_LOGGING_LEVEL:-WARNING}\"\n  export PROMETHEUS_MULTIPROC_DIR=\"${PROMETHEUS_MULTIPROC_DIR:-$FLOX_ENV_CACHE/vllm-prometheus}\"\n\n  # ── Reset vLLM cache if requested ──\n  if [[ \"${VLLM_RESET_CACHE:-0}\" == \"1\" ]]; then\n    echo \"VLLM_RESET_CACHE=1: removing vLLM cached files from $FLOX_ENV_CACHE\"\n    rm -f \"$FLOX_ENV_CACHE\"/vllm-config.yaml\n    rm -f \"$FLOX_ENV_CACHE\"/vllm-config.active.yaml\n    rm -f \"$FLOX_ENV_CACHE\"/vllm-model.*.env\n    rm -rf \"$FLOX_ENV_CACHE\"/vllm-prometheus\n    unset VLLM_RESET_CACHE\n  fi\n\n  mkdir -p \"$VLLM_MODELS_DIR\"\n  mkdir -p \"$PROMETHEUS_MULTIPROC_DIR\"\n\n  # ── Ensure vllm config has compilation disabled (nvcc not on PATH) ──\n  _vllm_config=\"$FLOX_ENV_CACHE/vllm-config.yaml\"\n  if [[ ! -f \"$_vllm_config\" ]]; then\n    cat > \"$_vllm_config\" <<'VLLM_YAML'\nhost: \"0.0.0.0\"\nport: 8000\n\ndtype: float16\ngpu-memory-utilization: 0.85\nquantization: awq\ncompilation-config: '{\"mode\": 0}'\n\nuvicorn-log-level: \"warning\"\nVLLM_YAML\n  elif ! grep -q 'compilation-config' \"$_vllm_config\"; then\n    printf '\\ncompilation-config: '\\''{\"mode\": 0}'\\''\\n' >> \"$_vllm_config\"\n  fi\n\n"
+      "on-activate": "  # Model\n  export VLLM_MODEL=\"${VLLM_MODEL:-Phi-3.5-mini-instruct-AWQ}\"\n  export VLLM_MODEL_ORG=\"${VLLM_MODEL_ORG:-microsoft}\"\n  export VLLM_MODEL_SOURCES=\"${VLLM_MODEL_SOURCES:-flox,local,hf-cache,hf-hub}\"\n  export VLLM_MODELS_DIR=\"${VLLM_MODELS_DIR:-$FLOX_ENV_PROJECT/models}\"\n  export VLLM_SERVED_MODEL_NAME=\"${VLLM_SERVED_MODEL_NAME:-Phi-3.5-mini-instruct}\"\n\n  # Server\n  export VLLM_HOST=\"${VLLM_HOST:-0.0.0.0}\"\n  export VLLM_PORT=\"${VLLM_PORT:-8000}\"\n  export VLLM_API_KEY=\"${VLLM_API_KEY:-sk-vllm-local-dev}\"\n\n  # Engine tuning\n  export VLLM_TENSOR_PARALLEL_SIZE=\"${VLLM_TENSOR_PARALLEL_SIZE:-1}\"\n  export VLLM_PIPELINE_PARALLEL_SIZE=\"${VLLM_PIPELINE_PARALLEL_SIZE:-1}\"\n  export VLLM_PREFIX_CACHING=\"${VLLM_PREFIX_CACHING:-false}\"\n  export VLLM_KV_CACHE_DTYPE=\"${VLLM_KV_CACHE_DTYPE:-auto}\"\n  export VLLM_MAX_MODEL_LEN=\"${VLLM_MAX_MODEL_LEN:-4096}\"\n  export VLLM_MAX_NUM_BATCHED_TOKENS=\"${VLLM_MAX_NUM_BATCHED_TOKENS:-4096}\"\n  export VLLM_MAX_TOKENS=\"${VLLM_MAX_TOKENS:-1024}\"\n\n  # Logging / metrics\n  export VLLM_LOGGING_LEVEL=\"${VLLM_LOGGING_LEVEL:-WARNING}\"\n  export PROMETHEUS_MULTIPROC_DIR=\"${PROMETHEUS_MULTIPROC_DIR:-$FLOX_ENV_CACHE/vllm-prometheus}\"\n\n  # ── Reset vLLM cache if requested ──\n  if [[ \"${VLLM_RESET_CACHE:-0}\" == \"1\" ]]; then\n    echo \"VLLM_RESET_CACHE=1: removing vLLM cached files from $FLOX_ENV_CACHE\"\n    rm -f \"$FLOX_ENV_CACHE\"/vllm-config.yaml\n    rm -f \"$FLOX_ENV_CACHE\"/vllm-config.active.yaml\n    rm -f \"$FLOX_ENV_CACHE\"/vllm-model.*.env\n    rm -rf \"$FLOX_ENV_CACHE\"/vllm-prometheus\n    unset VLLM_RESET_CACHE\n  fi\n\n  mkdir -p \"$VLLM_MODELS_DIR\"\n  mkdir -p \"$PROMETHEUS_MULTIPROC_DIR\"\n\n  # ── Ensure vllm config has compilation disabled (nvcc not on PATH) ──\n  # mode 0 = NO_COMPILATION (disables torch.compile/inductor which need nvcc).\n  # cudagraph_mode FULL_DECODE_ONLY = capture decode phase as CUDA graphs (no\n  # nvcc needed; reduces kernel-launch overhead). FULL is not supported by\n  # FlashAttention backend — vLLM auto-downgrades, so we set this directly.\n  _vllm_compilation='{\"mode\": 0, \"cudagraph_mode\": \"FULL_DECODE_ONLY\"}'\n  _vllm_config=\"$FLOX_ENV_CACHE/vllm-config.yaml\"\n  if [[ ! -f \"$_vllm_config\" ]]; then\n    cat > \"$_vllm_config\" <<VLLM_YAML\nhost: \"0.0.0.0\"\nport: 8000\n\ndtype: float16\ngpu-memory-utilization: 0.85\nquantization: awq\ncompilation-config: '$_vllm_compilation'\n\nuvicorn-log-level: \"warning\"\nVLLM_YAML\n  elif ! grep -q 'compilation-config' \"$_vllm_config\"; then\n    printf '\\ncompilation-config: '\\''%s'\\''\\n' \"$_vllm_compilation\" >> \"$_vllm_config\"\n  fi\n\n"
     },
     "options": {
       "systems": [
@@ -253,33 +253,6 @@
       "priority": 5
     },
     {
-      "attr_path": "vllm-phi-3-5-mini-instruct-awq",
-      "broken": false,
-      "derivation": "/nix/store/cjyv77cbmdjlwchnq0hnvn9q094yz5sn-vllm-phi-3.5-mini-instruct-awq-1.0.1+d6c46be.drv",
-      "install_id": "vllm-phi-3-5-mini-instruct-awq",
-      "locked_url": "git@github.com:barstoolbluz/build-hf-models.git?rev=fa2ef3e6e5fbe95bf0acb8a597b2057a6d0b0685",
-      "name": "vllm-phi-3.5-mini-instruct-awq-1.0.1+d6c46be",
-      "pname": "vllm-phi-3.5-mini-instruct-awq",
-      "rev": "fa2ef3e6e5fbe95bf0acb8a597b2057a6d0b0685",
-      "rev_count": 15,
-      "rev_date": "2026-03-19T22:15:33Z",
-      "scrape_date": "2026-03-21T01:15:28.362285180Z",
-      "stabilities": [
-        "unstable"
-      ],
-      "unfree": false,
-      "version": "1.0.1+d6c46be",
-      "outputs_to_install": [
-        "out"
-      ],
-      "outputs": {
-        "out": "/nix/store/kcqm00xidrxvyyg0v96viccvbbg6syy4-vllm-phi-3.5-mini-instruct-awq-1.0.1+d6c46be"
-      },
-      "system": "x86_64-linux",
-      "group": "vllm-phi-3-5-mini-instruct-awq",
-      "priority": 5
-    },
-    {
       "attr_path": "vllm-flox-runtime",
       "broken": false,
       "derivation": "/nix/store/22azi5n7mjnvfkn84rwwjrb525g7v0h4-vllm-flox-runtime-0.9.7+54716d4.drv",
@@ -307,6 +280,33 @@
       },
       "system": "x86_64-linux",
       "group": "vllm-flox-runtime",
+      "priority": 5
+    },
+    {
+      "attr_path": "vllm-phi-3-5-mini-instruct-awq",
+      "broken": false,
+      "derivation": "/nix/store/cjyv77cbmdjlwchnq0hnvn9q094yz5sn-vllm-phi-3.5-mini-instruct-awq-1.0.1+d6c46be.drv",
+      "install_id": "vllm-phi-3-5-mini-instruct-awq",
+      "locked_url": "git@github.com:barstoolbluz/build-hf-models.git?rev=fa2ef3e6e5fbe95bf0acb8a597b2057a6d0b0685",
+      "name": "vllm-phi-3.5-mini-instruct-awq-1.0.1+d6c46be",
+      "pname": "vllm-phi-3.5-mini-instruct-awq",
+      "rev": "fa2ef3e6e5fbe95bf0acb8a597b2057a6d0b0685",
+      "rev_count": 15,
+      "rev_date": "2026-03-19T22:15:33Z",
+      "scrape_date": "2026-03-21T01:15:28.362285180Z",
+      "stabilities": [
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.0.1+d6c46be",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/kcqm00xidrxvyyg0v96viccvbbg6syy4-vllm-phi-3.5-mini-instruct-awq-1.0.1+d6c46be"
+      },
+      "system": "x86_64-linux",
+      "group": "vllm-phi-3-5-mini-instruct-awq",
       "priority": 5
     }
   ]
