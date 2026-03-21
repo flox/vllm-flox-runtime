@@ -595,13 +595,11 @@ Deploy vLLM to Kubernetes using the Flox "Imageless Kubernetes" (uncontained) pa
 
 - A Kubernetes cluster with the [Flox containerd shim](https://flox.dev/docs/tutorials/kubernetes/) installed on GPU nodes
 - NVIDIA GPU operator or device plugin configured
-- A StorageClass that supports `ReadWriteOnce` PVCs
 
 ### Deploy
 
 ```bash
 kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/pvc.yaml
 kubectl apply -f k8s/deployment.yaml
 kubectl apply -f k8s/service.yaml
 ```
@@ -611,15 +609,29 @@ kubectl apply -f k8s/service.yaml
 | File | Purpose |
 |------|---------|
 | `k8s/namespace.yaml` | Creates the `vllm` namespace |
-| `k8s/pvc.yaml` | 50 Gi `ReadWriteOnce` volume for model storage at `/models` |
-| `k8s/deployment.yaml` | Single-replica pod with Flox shim, GPU resources, health probes |
+| `k8s/deployment.yaml` | Single-replica `Recreate` deployment with Flox shim, GPU resources, `emptyDir` volume, health probes |
 | `k8s/service.yaml` | ClusterIP service on port 8000 |
+| `k8s/pvc.yaml` | _(optional)_ 50 Gi `ReadWriteOnce` volume for persistent model storage |
 
-The deployment uses `runtimeClassName: flox` and `image: flox/empty:1.0.0` — the Flox shim intercepts pod creation, pulls `barstoolbluz/vllm-runtime` from FloxHub, activates the environment, then runs the entrypoint (`vllm-preflight && vllm-resolve-model && vllm-serve`).
+The deployment uses `runtimeClassName: flox` and `image: flox/empty:1.0.0` — the Flox shim intercepts pod creation, pulls `flox/vllm-runtime` from FloxHub, activates the environment, then runs the entrypoint (`vllm-preflight && vllm-resolve-model && vllm-serve`). The `Recreate` strategy ensures the old pod releases its GPU before the new pod starts.
 
 ### Storage
 
-Model weights are stored on the PVC mounted at `/models`. The pod sets `VLLM_MODELS_DIR=/models` to override the local default (`$FLOX_ENV_PROJECT/models`). The default Phi-3.5-mini-instruct-AWQ model is included as a Flox package and resolved via the `flox` source — no download required at startup.
+By default the deployment uses an `emptyDir` volume at `/models`. The default Phi-3.5-mini-instruct-AWQ model is included as a Flox package and resolved via the `flox` source — no download required at startup, so ephemeral storage is sufficient.
+
+For persistent model storage (survives pod restarts, avoids re-downloading large models), apply `k8s/pvc.yaml` and update the deployment volume:
+
+```bash
+kubectl apply -f k8s/pvc.yaml
+```
+
+```yaml
+# In deployment.yaml, replace the emptyDir volume:
+volumes:
+  - name: vllm-models
+    persistentVolumeClaim:
+      claimName: vllm-models
+```
 
 Set the `storageClassName` in `k8s/pvc.yaml` to match your cluster:
 
@@ -666,7 +678,7 @@ resources:
 
 ### Startup timing
 
-The `startupProbe` allows 10 minutes (60 failures x 10s) for warm starts with a cached model on the PVC. For cold starts (first-time model download), increase the threshold:
+The `startupProbe` allows 10 minutes (60 failures x 10s) for warm starts (Flox-bundled model or cached model on a PVC). For cold starts (first-time model download), increase the threshold:
 
 ```yaml
 startupProbe:

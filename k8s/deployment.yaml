@@ -10,6 +10,8 @@ spec:
   # node-local (PVC is ReadWriteOnce). Scale by adding Deployments on
   # separate nodes, not by increasing replicas.
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: vllm
@@ -18,10 +20,8 @@ spec:
       labels:
         app.kubernetes.io/name: vllm
       annotations:
-        flox.dev/environment: "barstoolbluz/vllm-runtime"
-        # Activate mode "run" (the default) is correct here — the on-activate
-        # hook only sets env vars, creates directories, and generates config.
-        # No build tools required.
+        flox.dev/environment: "flox/vllm-runtime"
+        flox.dev/activate-mode: "dev"
     spec:
       runtimeClassName: flox
 
@@ -32,8 +32,7 @@ spec:
 
       volumes:
         - name: vllm-models
-          persistentVolumeClaim:
-            claimName: vllm-models
+          emptyDir: {}
 
       containers:
         - name: vllm
@@ -46,6 +45,8 @@ spec:
             # which is ephemeral in Kubernetes.
             - name: VLLM_MODELS_DIR
               value: "/models"
+            - name: VLLM_SKIP_GPU_CHECK
+              value: "1"
 
             # ── Secrets ──
             # Uncomment and create the referenced Secret to enable:
