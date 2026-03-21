@@ -698,10 +698,10 @@ kubectl -n vllm logs -f deployment/vllm
 
 # Health check (from within the cluster)
 kubectl -n vllm run curl --rm -it --image=curlimages/curl -- \
-  curl http://vllm:8000/health
+  curl http://vllm-server:8000/health
 
 # Port-forward for local access
-kubectl -n vllm port-forward svc/vllm 8000:8000
+kubectl -n vllm port-forward svc/vllm-server 8000:8000
 curl http://localhost:8000/health
 ```
 
@@ -711,10 +711,10 @@ The service defaults to `ClusterIP`. For external access, change the type or add
 
 ```bash
 # Quick LoadBalancer
-kubectl -n vllm patch svc vllm -p '{"spec":{"type":"LoadBalancer"}}'
+kubectl -n vllm patch svc vllm-server -p '{"spec":{"type":"LoadBalancer"}}'
 
 # Or use port-forward for development
-kubectl -n vllm port-forward svc/vllm 8000:8000
+kubectl -n vllm port-forward svc/vllm-server 8000:8000
 ```
 
 ## Troubleshooting
